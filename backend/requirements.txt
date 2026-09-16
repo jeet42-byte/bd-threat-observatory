@@ -1,0 +1,21 @@
+# --- Web / API ---
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# --- Database (async) ---
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# --- Settings ---
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# --- Collectors / HTTP ---
+httpx==0.28.1
+tenacity==9.0.0   # retry with backoff for flaky OSINT sources
+tldextract==5.1.3 # robust registrable-domain / TLD parsing
+idna==3.10        # punycode <-> unicode for homoglyph work (Day 2)
+
+# --- Dev ---
+python-dotenv==1.0.1
