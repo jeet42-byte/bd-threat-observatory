@@ -114,3 +114,55 @@ class Certificate(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Certificate crtsh_id={self.crtsh_id} cn={self.common_name}>"
+
+
+class ThreatFinding(Base):
+    """A domain flagged as likely impersonating a monitored brand.
+
+    Produced by the phishing detector (Day 2). One row per (brand, domain):
+    re-running detection updates the score in place rather than duplicating.
+    """
+
+    __tablename__ = "threat_findings"
+    __table_args__ = (
+        UniqueConstraint("brand_id", "domain_id", name="uq_finding_brand_domain"),
+        Index("ix_findings_risk", "risk_score"),
+        Index("ix_findings_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    brand_id: Mapped[int] = mapped_column(
+        ForeignKey("brands.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    domain_id: Mapped[int] = mapped_column(
+        ForeignKey("domains.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 0-100 heuristic risk score.
+    risk_score: Mapped[int] = mapped_column(nullable=False, default=0)
+    # low | medium | high | critical
+    confidence: Mapped[str] = mapped_column(String(20), nullable=False, default="low")
+    # Human-readable signals that fired, e.g. ["brand keyword 'bkash'",
+    # "suspicious TLD .xyz", "lure token 'reward'"].
+    reasons: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    # new | reviewed | confirmed | dismissed  (workflow for later triage)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="new", index=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    brand: Mapped["Brand"] = relationship()
+    domain: Mapped["Domain"] = relationship()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"<ThreatFinding brand={self.brand_id} domain={self.domain_id} "
+            f"risk={self.risk_score}>"
+        )

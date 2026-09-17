@@ -79,7 +79,7 @@ python -m pytest -q                    # run the offline test suite
 Under active development — built in daily increments (see `HANDOFF.md`).
 
 - [x] **Day 1** — shared ingestion core: schema, brand seed, crt.sh collector, cron, CI
-- [ ] Day 2 — phishing detection: typosquat engine + classifier
+- [x] **Day 2** — phishing detection: typosquat/homoglyph engine, rule-based scoring, findings
 - [ ] Day 3 — public API + `/threats` dashboard
 - [ ] Day 4 — posture collector + A–F grading
 - [ ] Day 5 — `/posture` dashboard + cross-linking

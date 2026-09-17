@@ -2,7 +2,7 @@
 
     python -m app.collectors.run_ingest
 
-Steps: ensure schema -> seed brands -> collect from Certificate Transparency.
+Steps: ensure schema -> seed brands -> collect from CT -> detect phishing.
 Exits non-zero on fatal error so CI surfaces failures.
 """
 from __future__ import annotations
@@ -13,6 +13,7 @@ import sys
 from app.db.database import AsyncSessionLocal
 from app.db.init_db import init_db
 from app.collectors.ct_collector import ingest_from_crtsh, seed_brands
+from app.phishing.detector import run_detection
 
 
 async def main() -> int:
@@ -20,7 +21,9 @@ async def main() -> int:
     async with AsyncSessionLocal() as session:
         await seed_brands(session)
         stats = await ingest_from_crtsh(session)
-    print(f"[run_ingest] done: {stats.summary()}")
+        detect_stats = await run_detection(session)
+    print(f"[run_ingest] ingest: {stats.summary()}")
+    print(f"[run_ingest] detect: {detect_stats.summary()}")
     return 0
 
 
