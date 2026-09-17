@@ -17,6 +17,20 @@ SUSPICIOUS_TLDS: frozenset[str] = frozenset(
     }
 )
 
+# Free hosting / shared-subdomain platforms attackers use to stand up phishing
+# landing pages without registering a domain - the classic SMS-phishing (smishing)
+# delivery. A brand keyword on one of these is a strong signal.
+FREE_HOSTS: frozenset[str] = frozenset(
+    {
+        "pages.dev", "web.app", "firebaseapp.com", "workers.dev", "hosted.app",
+        "run.app", "netlify.app", "vercel.app", "glitch.me", "repl.co",
+        "replit.app", "replit.dev", "github.io", "gitlab.io", "surge.sh",
+        "r2.dev", "blogspot.com", "wixsite.com", "weebly.com", "square.site",
+        "000webhostapp.com", "herokuapp.com", "azurewebsites.net", "onrender.com",
+        "myshopify.com", "godaddysites.com", "webflow.io", "framer.website",
+    }
+)
+
 # Tokens typical of financial/credential lures, especially around BD MFS scams.
 LURE_TOKENS: frozenset[str] = frozenset(
     {
@@ -40,6 +54,7 @@ POINTS = {
     "lure_cap": 24,
     "many_hyphens": 6,       # 2+ hyphens
     "long_domain": 4,        # very long registrable domain
+    "free_host": 20,         # brand keyword on a free-hosting platform
 }
 
 
@@ -47,6 +62,13 @@ def tld_signal(tld: str) -> int:
     """Points for a suspicious TLD (uses the final label of a multi-part TLD)."""
     last = tld.rsplit(".", 1)[-1].lower()
     return POINTS["suspicious_tld"] if last in SUSPICIOUS_TLDS else 0
+
+
+def free_host_signal(registrable: str) -> tuple[int, str | None]:
+    """Points + reason if the domain sits on a free-hosting platform."""
+    if registrable.lower() in FREE_HOSTS:
+        return POINTS["free_host"], f"free-hosting platform '{registrable.lower()}'"
+    return 0, None
 
 
 def lure_signals(compact_labels: list[str]) -> tuple[int, list[str]]:

@@ -84,3 +84,15 @@ def test_short_keyword_needs_corroboration():
 def test_brand_glued_to_lure_is_caught():
     m = _match("bkashreward.com")
     assert m is not None and m.brand_slug == "bkash"
+
+
+def test_free_host_phishing_is_flagged():
+    # SMS-phishing landing pages on shared platforms score high with a reason.
+    for d in [
+        "sso-robi-nhood--login.pages.dev",
+        "bkash-verify.web.app",
+        "nagad-reward.netlify.app",
+    ]:
+        m = _match(d)
+        assert m is not None, d
+        assert any("free-hosting platform" in r for r in m.reasons)

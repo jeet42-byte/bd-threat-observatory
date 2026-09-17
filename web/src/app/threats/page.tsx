@@ -25,6 +25,20 @@ import { RiskBadge } from "@/components/RiskBadge";
 import { StatCard } from "@/components/StatCard";
 
 const CONFIDENCES = ["all", "critical", "high", "medium", "low"] as const;
+const REGISTERED = [
+  { value: "all", label: "Any age" },
+  { value: "30", label: "Last 30 days" },
+  { value: "90", label: "Last 90 days" },
+  { value: "established", label: "Established (>1yr)" },
+] as const;
+
+/** Best available "went live" date for a finding. */
+function regDate(t: Threat): Date {
+  return new Date(t.domain_created_at ?? t.issued_at ?? t.first_seen_at);
+}
+function ageDays(t: Threat): number {
+  return (Date.now() - regDate(t).getTime()) / 86400000;
+}
 
 export default function ThreatsPage() {
   const [threats, setThreats] = useState<Threat[]>([]);
@@ -36,6 +50,8 @@ export default function ThreatsPage() {
   const [confidence, setConfidence] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
   const [selected, setSelected] = useState<Threat | null>(null);
+  const [registered, setRegistered] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("risk");
   const [brandPosture, setBrandPosture] = useState<Record<string, Posture>>({});
 
   useEffect(() => {
@@ -67,15 +83,29 @@ export default function ThreatsPage() {
     };
   }, [brand, confidence, minScore]);
 
-  // Client-side filter too, so sample-mode filtering still works.
+  // Client-side filter + sort (also drives sample-mode).
   const visible = useMemo(() => {
-    return threats.filter(
-      (t) =>
-        (!brand || t.brand_slug === brand) &&
-        (confidence === "all" || t.confidence === confidence) &&
-        t.risk_score >= minScore,
-    );
-  }, [threats, brand, confidence, minScore]);
+    const list = threats.filter((t) => {
+      if (brand && t.brand_slug !== brand) return false;
+      if (confidence !== "all" && t.confidence !== confidence) return false;
+      if (t.risk_score < minScore) return false;
+      if (registered === "30" && ageDays(t) > 30) return false;
+      if (registered === "90" && ageDays(t) > 90) return false;
+      if (registered === "established" && ageDays(t) < 365) return false;
+      return true;
+    });
+    if (sortBy === "newest") {
+      list.sort((a, b) => regDate(b).getTime() - regDate(a).getTime());
+    } else {
+      list.sort((a, b) => b.risk_score - a.risk_score);
+    }
+    return list;
+  }, [threats, brand, confidence, minScore, registered, sortBy]);
+
+  const newCount = useMemo(
+    () => threats.filter((t) => ageDays(t) <= 30).length,
+    [threats],
+  );
 
   const brandOptions = useMemo(() => {
     const m = new Map<string, string>();
@@ -103,8 +133,9 @@ export default function ThreatsPage() {
         />
         <StatCard label="Domains seen" value={stats?.total_domains ?? "—"} />
         <StatCard
-          label="Certificates"
-          value={stats?.total_certificates ?? "—"}
+          label="New (<30d)"
+          value={newCount}
+          accent="text-sky-300"
         />
       </section>
 
@@ -147,6 +178,29 @@ export default function ThreatsPage() {
             className="w-40 accent-sky-500"
           />
         </Field>
+        <Field label="Registered">
+          <select
+            value={registered}
+            onChange={(e) => setRegistered(e.target.value)}
+            className="input"
+          >
+            {REGISTERED.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Sort by">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="input"
+          >
+            <option value="risk">Risk</option>
+            <option value="newest">Newest</option>
+          </select>
+        </Field>
         <div className="ml-auto text-sm text-slate-400">
           {loading ? "Loading…" : `${visible.length} shown`}
         </div>
@@ -177,7 +231,16 @@ export default function ThreatsPage() {
           <tbody className="divide-y divide-edge">
             {visible.map((t) => (
               <tr key={t.id} className="bg-base/40 hover:bg-panel/60">
-                <td className="px-4 py-3 font-mono text-sky-200">{t.domain}</td>
+                <td className="px-4 py-3 font-mono text-sky-200">
+                  <div className="flex items-center gap-2">
+                    <span>{t.domain}</span>
+                    {ageDays(t) <= 30 && (
+                      <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-300 ring-1 ring-sky-500/40">
+                        New
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <div>{t.brand_name}</div>
                   <div className="text-xs text-slate-500">{t.category}</div>

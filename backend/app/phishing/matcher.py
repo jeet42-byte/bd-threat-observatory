@@ -155,10 +155,15 @@ def match_brand(
     score += struct_pts
     reasons.extend(struct_reasons)
 
+    host_pts, host_reason = scoring.free_host_signal(registrable)
+    if host_pts:
+        score += host_pts
+        reasons.append(host_reason)
+
     # A short brand keyword (<= 4 chars, e.g. "upay", "ibbl", "robi") matched on
     # its own, with no suspicious TLD / lure / structure signal, collides with
     # unrelated foreign companies. Require at least one corroborating signal.
-    amplifier_fired = bool(tld_pts or lure_pts or struct_pts)
+    amplifier_fired = bool(tld_pts or lure_pts or struct_pts or host_pts)
     if len(matched_keyword) <= 4 and not amplifier_fired:
         return None
 
