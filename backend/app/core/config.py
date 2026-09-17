@@ -60,9 +60,13 @@ class Settings(BaseSettings):
     )
 
     # --- Ingestion tuning ---
-    # crt.sh can be slow; keep timeouts generous but bounded.
-    ct_http_timeout: float = Field(default=30.0)
+    # crt.sh can be slow; keep timeouts bounded so a slow keyword fails fast.
+    ct_http_timeout: float = Field(default=20.0)
     ct_max_results_per_brand: int = Field(default=1000)
+    # Overall wall-clock budget for one crt.sh sweep. Past this, ingestion stops
+    # starting new queries and persists what it has (keeps the job well under
+    # its timeout and never commits nothing).
+    ct_run_budget_seconds: int = Field(default=600)
     # Only certificates first-seen within this many days are considered "new"
     # for the live feed. Backfill ignores this.
     ct_recent_days: int = Field(default=7)

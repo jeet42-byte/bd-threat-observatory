@@ -9,6 +9,7 @@ Only public certificate metadata is read. Nothing is scanned or probed.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Iterable
 
 import httpx
@@ -33,8 +34,8 @@ class CrtShError(RuntimeError):
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=2, min=2, max=16),
+    stop=stop_after_attempt(2),  # crt.sh wildcard scans are slow; fail fast
+    wait=wait_exponential(multiplier=2, min=2, max=8),
     retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
 )
 async def _fetch(client: httpx.AsyncClient, query: str) -> list[dict]:
@@ -72,11 +73,21 @@ async def search_keywords(keywords: Iterable[str]) -> list[dict]:
 
     Returns the concatenated raw rows; de-duplication happens downstream by
     crt.sh entry id when the rows are persisted.
+
+    crt.sh can be very slow or flaky, so the loop enforces an overall time
+    budget (``ct_run_budget_seconds``): once exceeded it stops starting new
+    queries and returns what it has, guaranteeing the run finishes and the
+    collected rows get persisted rather than the job timing out with nothing.
     """
     results: list[dict] = []
+    budget = settings.ct_run_budget_seconds
+    started = time.monotonic()
     timeout = httpx.Timeout(settings.ct_http_timeout)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         for i, keyword in enumerate(keywords):
+            if budget and time.monotonic() - started > budget:
+                print(f"[crtsh] time budget {budget}s reached; stopping early")
+                break
             if i:
                 await asyncio.sleep(_REQUEST_GAP_SECONDS)
             try:
