@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import brands, posture, stats, threats
+from app.api.v1 import brands, posture, stats, submit, threats
 from app.core.config import settings
 
 app = FastAPI(
@@ -51,3 +51,4 @@ app.include_router(threats.router, prefix=api)
 app.include_router(brands.router, prefix=api)
 app.include_router(stats.router, prefix=api)
 app.include_router(posture.router, prefix=api)
+app.include_router(submit.router, prefix=api)

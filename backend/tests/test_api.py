@@ -136,3 +136,25 @@ def test_report_endpoint_increments(client):
 
 def test_report_unknown_finding_404(client):
     assert client.post("/api/v1/threats/999999/report").status_code == 404
+
+
+def test_submit_matching_url_adds_finding(client):
+    before = client.get("/api/v1/threats").json()["total"]
+    r = client.post("/api/v1/submit", json={"url": "https://bkash-reward-bd.xyz/login"}).json()
+    assert r["matched"] is True
+    assert r["brand_name"] == "bKash"
+    assert r["report_count"] == 1
+    after = client.get("/api/v1/threats").json()["total"]
+    assert after == before + 1
+
+
+def test_submit_unrelated_url_not_added(client):
+    before = client.get("/api/v1/threats").json()["total"]
+    r = client.post("/api/v1/submit", json={"url": "https://example.org"}).json()
+    assert r["matched"] is False
+    assert client.get("/api/v1/threats").json()["total"] == before
+
+
+def test_submit_bad_url(client):
+    r = client.post("/api/v1/submit", json={"url": "   "}).json()
+    assert r["matched"] is False

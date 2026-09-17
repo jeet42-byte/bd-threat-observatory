@@ -102,3 +102,17 @@ class PostureListOut(BaseModel):
     items: list[PostureOut]
     grade_distribution: list[dict]
     average_score: float | None
+
+
+class SubmitIn(BaseModel):
+    url: str
+
+
+class SubmitOut(BaseModel):
+    matched: bool
+    message: str
+    domain: str | None = None
+    brand_name: str | None = None
+    risk_score: int | None = None
+    confidence: str | None = None
+    report_count: int | None = None

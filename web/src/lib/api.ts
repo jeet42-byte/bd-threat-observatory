@@ -111,3 +111,34 @@ export async function reportThreat(id: number): Promise<number | null> {
   }
   return null;
 }
+
+export interface SubmitResult {
+  matched: boolean;
+  message: string;
+  domain?: string;
+  brand_name?: string;
+  risk_score?: number;
+  confidence?: string;
+  report_count?: number;
+}
+
+/** Submit a scam URL (e.g. from an SMS). Adds it to the feed if it matches. */
+export async function submitScam(url: string): Promise<SubmitResult> {
+  if (!BASE) {
+    return {
+      matched: false,
+      message: "Submissions need the live backend (sample mode is read-only).",
+    };
+  }
+  try {
+    const res = await fetch(`${BASE}/api/v1/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (res.ok) return await res.json();
+    return { matched: false, message: `Submission failed (${res.status}).` };
+  } catch {
+    return { matched: false, message: "Could not reach the server." };
+  }
+}

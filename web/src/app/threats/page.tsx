@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   ShieldX,
   Siren,
+  MessageSquareWarning,
 } from "lucide-react";
 import type { IntelItem, Posture, Stats, Threat } from "@/lib/types";
 import {
@@ -17,6 +18,8 @@ import {
   fetchThreats,
   hasDmarc,
   reportThreat,
+  submitScam,
+  type SubmitResult,
 } from "@/lib/api";
 import { abuseReport } from "@/lib/abuse";
 import { AUTO_REPORT_THRESHOLD, reportTargets } from "@/lib/report";
@@ -52,6 +55,8 @@ export default function ThreatsPage() {
   const [selected, setSelected] = useState<Threat | null>(null);
   const [registered, setRegistered] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("risk");
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [brandPosture, setBrandPosture] = useState<Record<string, Posture>>({});
 
   useEffect(() => {
@@ -81,7 +86,7 @@ export default function ThreatsPage() {
     return () => {
       active = false;
     };
-  }, [brand, confidence, minScore]);
+  }, [brand, confidence, minScore, refreshKey]);
 
   // Client-side filter + sort (also drives sample-mode).
   const visible = useMemo(() => {
@@ -119,10 +124,18 @@ export default function ThreatsPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <Nav live={live} />
-      <p className="mt-4 text-sm text-slate-400">
-        Live phishing/scam domains impersonating monitored BD brands, from
-        Certificate Transparency.
-      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">
+          Live phishing/scam domains impersonating monitored BD brands, from
+          Certificate Transparency.
+        </p>
+        <button
+          onClick={() => setShowSubmit(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
+        >
+          <MessageSquareWarning size={16} /> Report a scam text
+        </button>
+      </div>
 
       <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Findings" value={stats?.total_findings ?? "—"} />
@@ -327,6 +340,13 @@ export default function ThreatsPage() {
         <AbusePanel threat={selected} onClose={() => setSelected(null)} />
       )}
 
+      {showSubmit && (
+        <SubmitPanel
+          onClose={() => setShowSubmit(false)}
+          onAdded={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+
       <style jsx global>{`
         .input {
           background: #0b0f1a;
@@ -407,6 +427,88 @@ function BrandDefense({ posture }: { posture?: Posture }) {
       {protectedByDmarc ? <ShieldCheck size={13} /> : <ShieldX size={13} />}
       {protectedByDmarc ? "DMARC" : "no DMARC"} · {posture.grade}
     </span>
+  );
+}
+
+function SubmitPanel({
+  onClose,
+  onAdded,
+}: {
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<SubmitResult | null>(null);
+
+  async function submit() {
+    if (!url.trim() || busy) return;
+    setBusy(true);
+    const r = await submitScam(url.trim());
+    setResult(r);
+    setBusy(false);
+    if (r.matched) onAdded();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-xl border border-edge bg-panel p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-semibold">
+            <MessageSquareWarning size={18} className="text-sky-400" />
+            Report a scam text
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          Got a suspicious link by SMS? Paste it here. If it impersonates a
+          monitored brand it is added to the feed and its report count bumped.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="https://bkash-reward.xyz/..."
+            className="input flex-1"
+          />
+          <button
+            onClick={submit}
+            disabled={busy || !url.trim()}
+            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+          >
+            {busy ? "Checking…" : "Submit"}
+          </button>
+        </div>
+        {result && (
+          <div
+            className={`mt-3 rounded-lg p-3 text-sm ring-1 ${
+              result.matched
+                ? "bg-red-500/10 text-red-200 ring-red-500/30"
+                : "bg-slate-600/15 text-slate-300 ring-slate-600/30"
+            }`}
+          >
+            {result.message}
+            {result.matched && result.risk_score !== undefined && (
+              <div className="mt-1 text-xs text-slate-400">
+                risk {result.risk_score}/100 · reports {result.report_count}
+              </div>
+            )}
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-slate-500">
+          We store only the URL, never your message or number.
+        </p>
+      </div>
+    </div>
   );
 }
 
