@@ -31,3 +31,32 @@ export interface Stats {
   top_brands: { brand_slug: string; brand_name: string; count: number }[];
   latest_finding_at: string | null;
 }
+
+export type Grade = "A" | "B" | "C" | "D" | "E" | "F";
+
+export interface PostureFinding {
+  check: string;
+  status: "ok" | "warn" | "fail";
+  detail: string;
+}
+
+export interface Posture {
+  target: string;
+  brand_slug: string | null;
+  category: string;
+  grade: Grade;
+  score: number;
+  headers_score: number;
+  tls_score: number;
+  email_score: number;
+  reachable: boolean;
+  findings: PostureFinding[];
+  checked_at: string;
+}
+
+export interface PostureList {
+  total: number;
+  items: Posture[];
+  grade_distribution: { grade: string; count: number }[];
+  average_score: number | null;
+}

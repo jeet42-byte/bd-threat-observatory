@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import {
-  ShieldAlert,
-  Radio,
-  Copy,
-  Check,
-  X,
-  ExternalLink,
-} from "lucide-react";
-import type { Stats, Threat } from "@/lib/types";
-import { fetchStats, fetchThreats } from "@/lib/api";
+import { Copy, Check, X, ExternalLink, ShieldCheck, ShieldX } from "lucide-react";
+import type { Posture, Stats, Threat } from "@/lib/types";
+import { fetchPosture, fetchStats, fetchThreats, hasDmarc } from "@/lib/api";
 import { abuseReport } from "@/lib/abuse";
+import { Nav } from "@/components/Nav";
 import { RiskBadge } from "@/components/RiskBadge";
 import { StatCard } from "@/components/StatCard";
 
@@ -28,6 +21,7 @@ export default function ThreatsPage() {
   const [confidence, setConfidence] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
   const [selected, setSelected] = useState<Threat | null>(null);
+  const [brandPosture, setBrandPosture] = useState<Record<string, Posture>>({});
 
   useEffect(() => {
     let active = true;
@@ -40,11 +34,17 @@ export default function ThreatsPage() {
         limit: 100,
       }),
       fetchStats(),
-    ]).then(([t, s]) => {
+      fetchPosture(),
+    ]).then(([t, s, p]) => {
       if (!active) return;
       setThreats(t.data.items);
       setLive(t.live && s.live);
       setStats(s.data);
+      const map: Record<string, Posture> = {};
+      p.data.items.forEach((row) => {
+        if (row.brand_slug) map[row.brand_slug] = row;
+      });
+      setBrandPosture(map);
       setLoading(false);
     });
     return () => {
@@ -73,28 +73,11 @@ export default function ThreatsPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <ShieldAlert className="text-sky-400" size={26} />
-          <div>
-            <Link href="/" className="text-lg font-bold hover:text-sky-300">
-              BD Threat Observatory
-            </Link>
-            <p className="text-xs text-slate-400">
-              Phishing &amp; scam-domain feed · passive OSINT
-            </p>
-          </div>
-        </div>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 ${
-            live
-              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-              : "bg-slate-500/15 text-slate-300 ring-slate-500/30"
-          }`}
-        >
-          <Radio size={13} /> {live ? "Live data" : "Sample data"}
-        </span>
-      </header>
+      <Nav live={live} />
+      <p className="mt-4 text-sm text-slate-400">
+        Live phishing/scam domains impersonating monitored BD brands, from
+        Certificate Transparency.
+      </p>
 
       <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Findings" value={stats?.total_findings ?? "—"} />
@@ -163,6 +146,7 @@ export default function ThreatsPage() {
               <th className="px-4 py-3">Risk</th>
               <th className="px-4 py-3">Signals</th>
               <th className="px-4 py-3">First seen</th>
+              <th className="px-4 py-3">Brand defense</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -198,6 +182,9 @@ export default function ThreatsPage() {
                   {new Date(t.first_seen_at).toISOString().slice(0, 10)}
                 </td>
                 <td className="px-4 py-3">
+                  <BrandDefense posture={brandPosture[t.brand_slug]} />
+                </td>
+                <td className="px-4 py-3">
                   <button
                     onClick={() => setSelected(t)}
                     className="rounded border border-edge px-2 py-1 text-xs text-slate-300 hover:border-sky-500 hover:text-sky-300"
@@ -210,7 +197,7 @@ export default function ThreatsPage() {
             {!loading && visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="px-4 py-10 text-center text-slate-500"
                 >
                   No findings match these filters.
@@ -242,6 +229,28 @@ export default function ThreatsPage() {
         }
       `}</style>
     </main>
+  );
+}
+
+function BrandDefense({ posture }: { posture?: Posture }) {
+  if (!posture) {
+    return <span className="text-xs text-slate-600">—</span>;
+  }
+  const protectedByDmarc = hasDmarc(posture);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs ${
+        protectedByDmarc ? "text-emerald-300" : "text-red-300"
+      }`}
+      title={
+        protectedByDmarc
+          ? `${posture.target} enforces DMARC (grade ${posture.grade})`
+          : `${posture.target} has no enforced DMARC — spoofing not blunted (grade ${posture.grade})`
+      }
+    >
+      {protectedByDmarc ? <ShieldCheck size={13} /> : <ShieldX size={13} />}
+      {protectedByDmarc ? "DMARC" : "no DMARC"} · {posture.grade}
+    </span>
   );
 }
 

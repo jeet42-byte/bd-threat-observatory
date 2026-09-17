@@ -123,5 +123,5 @@ Under active development — built in daily increments (see `HANDOFF.md`).
 - [x] **Day 2** — phishing detection: typosquat/homoglyph engine, rule-based scoring, findings
 - [x] **Day 3** — public API (FastAPI) + `/threats` dashboard (Next.js) + mock seed
 - [x] **Day 4** — posture observatory: passive header/TLS/email-auth checks + A–F grading + API
-- [ ] Day 5 — `/posture` dashboard + cross-linking
+- [x] **Day 5** — `/posture` dashboard (grades, sub-score bars, distribution chart) + threat↔posture cross-link
 - [ ] Day 6 — polish, report, deploy

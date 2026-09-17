@@ -3,7 +3,7 @@
 Session-to-session state so any new session can resume without re-explaining.
 Branch: `claude/nifty-ritchie-omdcrq`
 
-## Where we are: end of Day 4
+## Where we are: end of Day 5
 
 **Goal of the week:** build two portfolio projects (#1 Security Posture
 Observatory, #2 Phishing/Scam Feed) as ONE repo sharing a Certificate
@@ -117,19 +117,38 @@ Transparency ingestion core. Stack mirrors the author's `bangladesh-crime-monito
 - Live probes (headers/TLS/DNS) + real Postgres need GitHub Actions + Neon.
   Scoring/collector/API logic proven on SQLite; only live scan pending.
 
+
+### Done (Day 5) — posture dashboard + cross-link
+- `web/src/lib/types.ts` — posture types (Grade, PostureFinding, Posture,
+  PostureList). `web/src/lib/postureSample.ts` — bundled fallback (6 orgs).
+- `web/src/lib/api.ts` — `fetchPosture()` with sample fallback + `hasDmarc()`.
+- Components: `GradeBadge`, `ScoreBar`, shared `Nav` (tabs: feed / posture).
+- `web/src/app/posture/page.tsx` — org table (grade badge, headers/TLS/email
+  sub-score bars, DMARC indicator), category filter, Recharts grade-distribution
+  chart, findings drill-down modal, stat cards.
+- `/threats` page: now uses shared Nav + new "Brand defense" column — for each
+  phishing finding it shows whether the impersonated brand's real domain
+  enforces DMARC (cross-links posture into the feed: is spoofing blunted?).
+- `npm run build` clean (6 routes, compile + strict typecheck + lint); server
+  smoke test served /posture and /threats.
+
+### Deploy note
+- Both dashboards read `NEXT_PUBLIC_API_BASE`; without it they render bundled
+  sample data (so Vercel preview works before the API/DB is live).
+
 ## To deploy the pipeline (when ready)
 1. Create a Neon Postgres DB; get the `postgresql+asyncpg://...` URL.
 2. Add repo secret `DATABASE_URL` (Settings → Secrets → Actions).
 3. Run the `ingest_cron` workflow via "Run workflow" (workflow_dispatch).
 4. Confirm rows land in `brands`, `domains`, `certificates`.
 
-## Next: Day 5 — /posture dashboard + cross-linking
-- Next.js `/posture` page: org table with A-F grade badges, sub-score bars,
-  category filter, grade distribution chart (Recharts), findings drill-down.
-- Cross-link: on a threat, show whether the impersonated brand's real domain
-  has DMARC (from posture) - i.e. is spoofing blunted. Add a small nav between
-  /threats and /posture.
-- Extend `web/src/lib` with posture types + fetch + sample fallback.
+## Next: Day 6 — polish, report, deploy
+- READMEs with screenshots/GIF of both dashboards.
+- "State of .bd Web Security" mini-report generator (markdown/PDF from posture
+  data): grade distribution, worst offenders, common gaps.
+- Deploy: Neon (DB) + Render (API) + Vercel (web); set DATABASE_URL secret,
+  run ingest + posture workflows once, point NEXT_PUBLIC_API_BASE at Render.
+- Optional: small landing polish + about/ethics page.
 
 ## Conventions
 - Every day ends at a committed, working checkpoint pushed to the branch.

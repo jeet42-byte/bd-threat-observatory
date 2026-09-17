@@ -56,3 +56,41 @@ export async function fetchStats(): Promise<{ data: Stats; live: boolean }> {
   }
   return { data: SAMPLE_STATS, live: false };
 }
+
+// --- Posture ---------------------------------------------------------------
+import type { Posture, PostureList } from "./types";
+import { SAMPLE_POSTURE } from "./postureSample";
+
+export interface PostureQuery {
+  category?: string;
+  grade?: string;
+  brand?: string;
+}
+
+export async function fetchPosture(
+  query: PostureQuery = {},
+): Promise<{ data: PostureList; live: boolean }> {
+  if (BASE) {
+    try {
+      const p = new URLSearchParams();
+      Object.entries(query).forEach(([k, v]) => {
+        if (v) p.set(k, String(v));
+      });
+      const q = p.toString() ? `?${p.toString()}` : "";
+      const res = await fetch(`${BASE}/api/v1/posture${q}`, {
+        cache: "no-store",
+      });
+      if (res.ok) return { data: await res.json(), live: true };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { data: SAMPLE_POSTURE, live: false };
+}
+
+/** Does this posture record have an enforced/valid DMARC policy? */
+export function hasDmarc(p: Posture): boolean {
+  return p.findings.some(
+    (f) => f.check.toUpperCase() === "DMARC" && f.status === "ok",
+  );
+}
