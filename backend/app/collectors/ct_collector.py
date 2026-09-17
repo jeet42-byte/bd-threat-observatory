@@ -12,9 +12,8 @@ id, and domains by name, so re-running only adds what is genuinely new.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors import crtsh
@@ -74,34 +73,6 @@ def _brand_keywords() -> list[str]:
     return ordered
 
 
-async def _get_or_create_domain(
-    session: AsyncSession,
-    cache: dict[str, Domain],
-    name: str,
-    stats: IngestStats,
-) -> Domain:
-    if name in cache:
-        return cache[name]
-    dom = (
-        await session.execute(select(Domain).where(Domain.name == name))
-    ).scalar_one_or_none()
-    if dom is None:
-        registrable, tld = registrable_and_tld(name)
-        dom = Domain(
-            name=name,
-            registrable_domain=registrable,
-            tld=tld,
-            source="ct",
-        )
-        session.add(dom)
-        await session.flush()  # assign PK for the certificate FK
-        stats.domains_created += 1
-    else:
-        dom.last_seen_at = datetime.now(timezone.utc)
-    cache[name] = dom
-    return dom
-
-
 async def fetch_crtsh_rows() -> tuple[list[dict], int]:
     """Fetch raw crt.sh rows for every brand keyword. No database involved.
 
@@ -120,52 +91,94 @@ async def ingest_from_crtsh(session: AsyncSession) -> IngestStats:
     return await persist_crtsh_rows(session, rows, keyword_count)
 
 
+def _chunks(seq: list, size: int):
+    for i in range(0, len(seq), size):
+        yield seq[i : i + size]
+
+
+def _row_names(row: dict) -> set[str]:
+    names = split_names(row.get("name_value"))
+    cn = clean_name(row.get("common_name", ""))
+    if cn:
+        names.add(cn)
+    return names
+
+
 async def persist_crtsh_rows(
     session: AsyncSession, rows: list[dict], keyword_count: int
 ) -> IngestStats:
-    """Persist already-fetched crt.sh rows as new certs + domains."""
+    """Persist already-fetched crt.sh rows as new certs + domains.
+
+    Batched to keep the database phase fast over a remote/serverless Postgres:
+    existing certificate ids and domains are looked up in chunked ``IN`` queries
+    rather than one round-trip per row (crt.sh can return tens of thousands of
+    rows for a popular brand).
+    """
     stats = IngestStats()
     stats.keywords_queried = keyword_count
     stats.rows_fetched = len(rows)
 
-    domain_cache: dict[str, Domain] = {}
-
+    # De-duplicate incoming rows by crt.sh entry id.
+    by_id: dict[int, dict] = {}
     for row in rows:
-        crtsh_id = row.get("id")
-        if crtsh_id is None:
-            continue
+        cid = row.get("id")
+        if cid is not None:
+            by_id.setdefault(cid, row)
 
-        # Skip certificates we already have (idempotent re-runs).
-        exists = (
+    # Which certificates do we already have? (chunked IN query)
+    existing_ids: set[int] = set()
+    all_ids = list(by_id)
+    for chunk in _chunks(all_ids, 5000):
+        found = (
             await session.execute(
-                select(func.count())
-                .select_from(Certificate)
-                .where(Certificate.crtsh_id == crtsh_id)
+                select(Certificate.crtsh_id).where(Certificate.crtsh_id.in_(chunk))
             )
-        ).scalar_one()
-        if exists:
-            stats.certificates_skipped += 1
-            continue
+        ).scalars().all()
+        existing_ids.update(found)
 
-        # Discover every domain in the certificate (CN + all SANs). Each becomes
-        # a Domain row so downstream products can see the full attack surface.
-        names = split_names(row.get("name_value"))
-        cn = clean_name(row.get("common_name", ""))
-        if cn:
-            names.add(cn)
+    new_ids = [cid for cid in all_ids if cid not in existing_ids]
+    stats.certificates_skipped = len(all_ids) - len(new_ids)
+
+    # Collect every domain name referenced by the new certificates.
+    names_by_id: dict[int, set[str]] = {}
+    all_names: set[str] = set()
+    for cid in new_ids:
+        names = _row_names(by_id[cid])
+        names_by_id[cid] = names
+        all_names.update(names)
+
+    # Load existing domains, then create the missing ones (one flush).
+    name_to_domain: dict[str, Domain] = {}
+    name_list = list(all_names)
+    for chunk in _chunks(name_list, 5000):
+        for dom in (
+            await session.execute(select(Domain).where(Domain.name.in_(chunk)))
+        ).scalars().all():
+            name_to_domain[dom.name] = dom
+
+    for name in all_names:
+        if name not in name_to_domain:
+            registrable, tld = registrable_and_tld(name)
+            dom = Domain(
+                name=name, registrable_domain=registrable, tld=tld, source="ct"
+            )
+            session.add(dom)
+            name_to_domain[name] = dom
+            stats.domains_created += 1
+    await session.flush()  # assign domain PKs for the certificate FKs
+
+    # Insert the new certificates, anchored to their common name / first SAN.
+    for cid in new_ids:
+        names = names_by_id[cid]
         if not names:
             continue
-        for name in names:
-            await _get_or_create_domain(session, domain_cache, name, stats)
-
-        # Anchor the certificate to its common name (or any discovered name).
-        anchor = cn or next(iter(names))
-        anchor_domain = domain_cache[anchor]
-
+        row = by_id[cid]
+        cn = clean_name(row.get("common_name", ""))
+        anchor = cn if cn in name_to_domain else next(iter(names))
         session.add(
             Certificate(
-                domain_id=anchor_domain.id,
-                crtsh_id=crtsh_id,
+                domain_id=name_to_domain[anchor].id,
+                crtsh_id=cid,
                 common_name=(row.get("common_name") or "")[:255] or None,
                 issuer_name=(row.get("issuer_name") or "")[:500] or None,
                 serial_number=(row.get("serial_number") or "")[:120] or None,
