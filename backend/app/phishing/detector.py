@@ -55,50 +55,42 @@ async def run_detection(session: AsyncSession) -> DetectStats:
         print("[detector] no brands in DB; run ingestion/seed first")
         return stats
 
+    # 1) Score every domain in memory (pure, no DB writes during the scan).
     domains = (await session.execute(select(Domain))).scalars().all()
+    matched: dict[int, tuple[int, object]] = {}  # domain_id -> (brand_id, match)
     for dom in domains:
         stats.domains_scanned += 1
         match = best_match(dom.name, dom.registrable_domain, dom.tld, brands)
         if match is None:
-            # No longer a match (e.g. a former false positive under improved
-            # rules): remove any stale finding so the feed self-cleans.
-            removed = (
-                await session.execute(
-                    delete(ThreatFinding).where(ThreatFinding.domain_id == dom.id)
-                )
-            ).rowcount
-            stats.findings_removed += removed or 0
             continue
         brand_id = slug_to_id.get(match.brand_slug)
-        if brand_id is None:  # pragma: no cover - slug always present
-            continue
+        if brand_id is not None:
+            matched[dom.id] = (brand_id, match)
 
-        # Drop findings for this domain attributed to a different brand
-        # (re-attribution under improved rules).
-        stale = (
-            await session.execute(
-                delete(ThreatFinding).where(
-                    ThreatFinding.domain_id == dom.id,
-                    ThreatFinding.brand_id != brand_id,
-                )
-            )
-        ).rowcount
-        stats.findings_removed += stale or 0
+    # 2) Load existing findings once; compute what to keep vs. remove.
+    existing = (await session.execute(select(ThreatFinding))).scalars().all()
+    existing_by_key = {(f.domain_id, f.brand_id): f for f in existing}
+    wanted_keys = {(did, bid) for did, (bid, _m) in matched.items()}
 
-        existing = (
-            await session.execute(
-                select(ThreatFinding).where(
-                    ThreatFinding.brand_id == brand_id,
-                    ThreatFinding.domain_id == dom.id,
-                )
-            )
-        ).scalar_one_or_none()
+    # Bulk-delete findings that are no longer valid (former false positives or
+    # re-attributions), in chunks - no per-row round-trips.
+    stale_ids = [f.id for key, f in existing_by_key.items() if key not in wanted_keys]
+    for i in range(0, len(stale_ids), 5000):
+        chunk = stale_ids[i : i + 5000]
+        await session.execute(
+            delete(ThreatFinding).where(ThreatFinding.id.in_(chunk))
+        )
+    stats.findings_removed = len(stale_ids)
 
-        if existing is None:
+    # 3) Upsert the current matches (one flush at commit).
+    now = datetime.now(timezone.utc)
+    for domain_id, (brand_id, match) in matched.items():
+        finding = existing_by_key.get((domain_id, brand_id))
+        if finding is None:
             session.add(
                 ThreatFinding(
                     brand_id=brand_id,
-                    domain_id=dom.id,
+                    domain_id=domain_id,
                     risk_score=match.score,
                     confidence=match.confidence,
                     reasons=match.reasons,
@@ -107,10 +99,10 @@ async def run_detection(session: AsyncSession) -> DetectStats:
             )
             stats.findings_created += 1
         else:
-            existing.risk_score = match.score
-            existing.confidence = match.confidence
-            existing.reasons = match.reasons
-            existing.updated_at = datetime.now(timezone.utc)
+            finding.risk_score = match.score
+            finding.confidence = match.confidence
+            finding.reasons = match.reasons
+            finding.updated_at = now
             stats.findings_updated += 1
 
     await session.commit()
