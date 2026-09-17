@@ -22,7 +22,11 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
+
+# JSONB on Postgres (indexable), plain JSON elsewhere (SQLite in tests/CI).
+JSONType = JSON().with_variant(JSONB, "postgresql")
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -39,11 +43,11 @@ class Brand(Base):
     # mfs | bank | telco | gov | university | ecommerce | other
     category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     # Tokens that, appearing in a domain, suggest impersonation ("bkash", "bkash-bd").
-    keywords: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    keywords: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
     # The brand's real, authoritative domains ("bkash.com"); used to exclude
     # legitimate certificates from the phishing feed.
     official_domains: Mapped[list[str]] = mapped_column(
-        JSONB, default=list, nullable=False
+        JSONType, default=list, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -143,7 +147,7 @@ class ThreatFinding(Base):
     confidence: Mapped[str] = mapped_column(String(20), nullable=False, default="low")
     # Human-readable signals that fired, e.g. ["brand keyword 'bkash'",
     # "suspicious TLD .xyz", "lure token 'reward'"].
-    reasons: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    reasons: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
     # new | reviewed | confirmed | dismissed  (workflow for later triage)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="new", index=True

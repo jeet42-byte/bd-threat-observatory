@@ -3,7 +3,7 @@
 Session-to-session state so any new session can resume without re-explaining.
 Branch: `claude/nifty-ritchie-omdcrq`
 
-## Where we are: end of Day 2
+## Where we are: end of Day 3
 
 **Goal of the week:** build two portfolio projects (#1 Security Posture
 Observatory, #2 Phishing/Scam Feed) as ONE repo sharing a Certificate
@@ -62,21 +62,49 @@ Transparency ingestion core. Stack mirrors the author's `bangladesh-crime-monito
 - Live crt.sh fetch + real DB writes still need GitHub Actions + Neon
   `DATABASE_URL`. Detector DB path is thin SQLAlchemy over the tested matcher.
 
+
+### Done (Day 3) — public API + dashboard
+- `backend/app/api/schemas.py` — Pydantic response models.
+- `backend/app/api/v1/{threats,brands,stats}.py` — routers.
+  - `GET /api/v1/threats` filters: brand, confidence, min_score, status, paging.
+  - `GET /api/v1/brands`, `GET /api/v1/stats` (counts by confidence/brand).
+- `backend/app/main.py` — FastAPI app, CORS, `/health`.
+- `backend/app/db/seed_mock.py` — synthetic domains+findings for demos.
+- Made ORM JSON columns cross-dialect (JSONType = JSON + Postgres JSONB variant)
+  and engine pool args conditional, so tests run on SQLite.
+- `backend/tests/test_api.py` — 6 integration tests over in-process SQLite
+  (endpoints, filters, joins). Suite now 26/26 green.
+- `web/` — Next.js 14 + Tailwind dashboard:
+  - `/` landing, `/threats` feed (stat cards, brand/confidence/min-score
+    filters, risk badges, signal chips, abuse-report modal with copy).
+  - `src/lib/{api,types,sample,abuse}.ts` — API client with bundled sample
+    fallback so it renders before the backend is live.
+- `.github/workflows/ci.yml` now installs requirements-dev.txt (aiosqlite).
+
+### Verified (Day 3)
+- `npm run build` clean (compile + strict typecheck + lint). `/threats`
+  prerenders; server smoke test served `/` and `/threats` with sample fallback.
+- API import + OpenAPI + 6 SQLite integration tests green.
+
+### NOT yet verified (same sandbox blocks)
+- Live crt.sh fetch + real Postgres still need GitHub Actions + Neon
+  `DATABASE_URL`. API/detector logic proven on SQLite; only live ingest pending.
+
 ## To deploy the pipeline (when ready)
 1. Create a Neon Postgres DB; get the `postgresql+asyncpg://...` URL.
 2. Add repo secret `DATABASE_URL` (Settings → Secrets → Actions).
 3. Run the `ingest_cron` workflow via "Run workflow" (workflow_dispatch).
 4. Confirm rows land in `brands`, `domains`, `certificates`.
 
-## Next: Day 3 — public API + /threats dashboard
-- FastAPI app (`app/main.py`) + read-only endpoints under `/api/v1`:
-  `GET /threats` (filter by brand/confidence/min_score, paginated),
-  `GET /brands`, `GET /stats` (counts by confidence/brand).
-- Pydantic response schemas; CORS for the Vercel frontend.
-- Next.js frontend `web/`: `/threats` page — table of findings (domain, brand,
-  score, confidence, reasons, first_seen) + copy-able abuse-report text.
-- Seed the DB with mock findings early so the UI renders before live ingest.
-- Deploy: API on Render, DB on Neon, frontend on Vercel (all free tier).
+## Next: Day 4 — posture observatory collector
+- Reuse discovered registrable domains (from `domains`) for BD orgs; add
+  `PostureScan` model (org, grade A-F, sub-scores, checked_at).
+- Passive checks only: HTTP security headers (HSTS, CSP, X-Frame-Options),
+  TLS version/cipher, and email auth (SPF/DKIM/DMARC via public DNS TXT).
+  All from a normal request / public DNS — no scanning.
+- Grading logic + `/api/v1/posture` endpoints; keep offline-testable
+  (feed synthetic header/DNS dicts into pure scoring functions).
+- Note: these checks also need outbound egress -> run on GitHub Actions.
 
 ## Conventions
 - Every day ends at a committed, working checkpoint pushed to the branch.

@@ -35,10 +35,15 @@ bd-threat-observatory/
 │   │   ├── core/config.py         env-driven settings
 │   │   ├── db/                    database.py, models.py, init_db.py
 │   │   ├── collectors/            crtsh.py, ct_collector.py, run_ingest.py
+│   │   ├── phishing/              permute.py, scoring.py, matcher.py, detector.py
+│   │   ├── api/                   schemas.py + v1/{threats,brands,stats}.py
+│   │   ├── main.py                FastAPI app
 │   │   ├── data/brands_seed.py    BD brands monitored for impersonation
 │   │   └── utils/domains.py       PSL-aware domain normalisation
 │   ├── tests/                     network-free unit tests
 │   └── requirements.txt
+├── web/                           Next.js dashboard (/threats)
+│   └── src/{app,components,lib}
 └── .github/workflows/
     ├── ingest_cron.yml            every 6 hours
     └── ci.yml                     tests on push / PR
@@ -74,13 +79,46 @@ python -m pytest -q                    # run the offline test suite
 > environments block outbound egress, in which case run the collector from a
 > machine that can reach crt.sh.
 
+## Public API
+
+Read-only FastAPI service (all writes happen in the collectors, never over HTTP).
+
+```bash
+cd backend && source .venv/bin/activate
+export DATABASE_URL="postgresql+asyncpg://user:pass@host/db"
+python -m app.db.seed_mock             # optional: synthetic findings for a demo
+uvicorn app.main:app --reload          # http://localhost:8000/docs
+```
+
+Endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | liveness |
+| GET | `/api/v1/threats` | phishing feed (filters: `brand`, `confidence`, `min_score`, pagination) |
+| GET | `/api/v1/brands` | monitored brands |
+| GET | `/api/v1/stats` | headline counts |
+
+## Frontend (dashboard)
+
+Next.js 14 + Tailwind. Renders the phishing feed; falls back to bundled sample
+data when the API is unreachable, so a preview deploy works before the backend
+is live.
+
+```bash
+cd web
+npm install
+cp .env.example .env.local   # set NEXT_PUBLIC_API_BASE to your API URL
+npm run dev                  # http://localhost:3000/threats
+```
+
 ## Status
 
 Under active development — built in daily increments (see `HANDOFF.md`).
 
 - [x] **Day 1** — shared ingestion core: schema, brand seed, crt.sh collector, cron, CI
 - [x] **Day 2** — phishing detection: typosquat/homoglyph engine, rule-based scoring, findings
-- [ ] Day 3 — public API + `/threats` dashboard
+- [x] **Day 3** — public API (FastAPI) + `/threats` dashboard (Next.js) + mock seed
 - [ ] Day 4 — posture collector + A–F grading
 - [ ] Day 5 — `/posture` dashboard + cross-linking
 - [ ] Day 6 — polish, report, deploy
