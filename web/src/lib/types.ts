@@ -12,6 +12,8 @@ export interface Threat {
   confidence: Confidence;
   reasons: string[];
   status: string;
+  report_count: number;
+  issued_at: string | null;
   first_seen_at: string;
   updated_at: string;
 }

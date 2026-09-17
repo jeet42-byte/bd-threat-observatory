@@ -94,3 +94,20 @@ export function hasDmarc(p: Posture): boolean {
     (f) => f.check.toUpperCase() === "DMARC" && f.status === "ok",
   );
 }
+
+/** Record a community "this is a scam" report (increments the counter). */
+export async function reportThreat(id: number): Promise<number | null> {
+  if (!BASE) return null; // sample mode: no backend to record against
+  try {
+    const res = await fetch(`${BASE}/api/v1/threats/${id}/report`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.report_count as number;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}

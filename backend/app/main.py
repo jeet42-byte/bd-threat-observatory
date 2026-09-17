@@ -1,7 +1,7 @@
 """FastAPI application: the public read-only intelligence API.
 
-Read-only by design: it exposes what the ingestion + detection pipeline has
-found. All writes happen in the scheduled collectors, never over HTTP.
+Mostly read-only: it exposes what the ingestion + detection pipeline has found.
+The one write is a community "report this scam" counter (POST /threats/{id}/report).
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.core.config import settings
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",
+    version="0.4.0",
     description=(
         "Passive security intelligence for Bangladesh's public web. "
         "Phishing/scam-domain feed derived from Certificate Transparency. "
@@ -24,9 +24,21 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def _ensure_schema() -> None:
+    """Self-migrate on deploy: ensure new columns exist. Best-effort so the
+    API still starts if the database is briefly unreachable."""
+    try:
+        from app.db.init_db import init_db
+
+        await init_db()
+    except Exception as exc:  # noqa: BLE001 - never block startup on this
+        print(f"[startup] schema ensure skipped: {exc}")
 
 
 @app.get("/health", tags=["meta"])

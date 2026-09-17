@@ -152,6 +152,9 @@ class ThreatFinding(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="new", index=True
     )
+    # Community "this is a scam" reports for this domain. A high count is a
+    # strong signal separating confirmed-abusive domains from false positives.
+    report_count: Mapped[int] = mapped_column(nullable=False, default=0)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

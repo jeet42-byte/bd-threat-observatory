@@ -115,3 +115,24 @@ def test_posture_endpoint_empty_ok(client):
     body = client.get("/api/v1/posture").json()
     assert body["total"] == 0
     assert body["average_score"] is None
+
+
+def test_threat_has_report_count_and_issued_at(client):
+    item = client.get("/api/v1/threats").json()["items"][0]
+    assert item["report_count"] == 0
+    assert "issued_at" in item  # present (may be null when no cert seeded)
+
+
+def test_report_endpoint_increments(client):
+    fid = client.get("/api/v1/threats").json()["items"][0]["id"]
+    r1 = client.post(f"/api/v1/threats/{fid}/report").json()
+    assert r1["report_count"] == 1
+    r2 = client.post(f"/api/v1/threats/{fid}/report").json()
+    assert r2["report_count"] == 2
+    # reflected in the feed
+    item = client.get("/api/v1/threats").json()["items"][0]
+    assert item["report_count"] == 2
+
+
+def test_report_unknown_finding_404(client):
+    assert client.post("/api/v1/threats/999999/report").status_code == 404

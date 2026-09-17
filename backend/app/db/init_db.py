@@ -13,6 +13,15 @@ from app.db.database import Base, engine
 from app.db import models  # noqa: F401  (register models on Base.metadata)
 
 
+# Lightweight, idempotent column additions for tables that already exist.
+# create_all only creates missing tables, never alters existing ones, so new
+# columns on a live database are added here (Postgres supports IF NOT EXISTS).
+_POSTGRES_COLUMN_MIGRATIONS = (
+    "ALTER TABLE threat_findings "
+    "ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 0",
+)
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         # pg_trgm powers fuzzy domain similarity on Postgres; skip on SQLite
@@ -20,6 +29,9 @@ async def init_db() -> None:
         if conn.dialect.name == "postgresql":
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
+        if conn.dialect.name == "postgresql":
+            for stmt in _POSTGRES_COLUMN_MIGRATIONS:
+                await conn.execute(text(stmt))
     print("[init_db] schema ready")
 
 

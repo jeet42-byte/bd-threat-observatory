@@ -28,6 +28,11 @@ class ThreatOut(BaseModel):
     confidence: str
     reasons: list[str]
     status: str
+    report_count: int
+    # Earliest TLS certificate issuance for this domain (Certificate
+    # Transparency). A close proxy for when the domain went live - far more
+    # meaningful than when our pipeline first ingested it. None if unknown.
+    issued_at: datetime | None
     first_seen_at: datetime
     updated_at: datetime
 
@@ -37,6 +42,12 @@ class ThreatListOut(BaseModel):
     limit: int
     offset: int
     items: list[ThreatOut]
+
+
+class ReportOut(BaseModel):
+    id: int
+    domain: str
+    report_count: int
 
 
 class ConfidenceCount(BaseModel):

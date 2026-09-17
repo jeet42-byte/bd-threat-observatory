@@ -1,10 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Check, X, ExternalLink, ShieldCheck, ShieldX } from "lucide-react";
+import {
+  Copy,
+  Check,
+  X,
+  ExternalLink,
+  ShieldCheck,
+  ShieldX,
+  Siren,
+} from "lucide-react";
 import type { Posture, Stats, Threat } from "@/lib/types";
-import { fetchPosture, fetchStats, fetchThreats, hasDmarc } from "@/lib/api";
+import {
+  fetchPosture,
+  fetchStats,
+  fetchThreats,
+  hasDmarc,
+  reportThreat,
+} from "@/lib/api";
 import { abuseReport } from "@/lib/abuse";
+import { AUTO_REPORT_THRESHOLD, reportTargets } from "@/lib/report";
 import { Nav } from "@/components/Nav";
 import { RiskBadge } from "@/components/RiskBadge";
 import { StatCard } from "@/components/StatCard";
@@ -145,7 +160,10 @@ export default function ThreatsPage() {
               <th className="px-4 py-3">Brand</th>
               <th className="px-4 py-3">Risk</th>
               <th className="px-4 py-3">Signals</th>
-              <th className="px-4 py-3">First seen</th>
+              <th className="px-4 py-3" title="Earliest TLS certificate (approx. go-live)">
+                Issued
+              </th>
+              <th className="px-4 py-3" title="Community scam reports">Reports</th>
               <th className="px-4 py-3">Brand defense</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -179,7 +197,21 @@ export default function ThreatsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-400">
-                  {new Date(t.first_seen_at).toISOString().slice(0, 10)}
+                  {(t.issued_at
+                    ? new Date(t.issued_at)
+                    : new Date(t.first_seen_at)
+                  )
+                    .toISOString()
+                    .slice(0, 10)}
+                </td>
+                <td className="px-4 py-3">
+                  {t.report_count > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-300 ring-1 ring-red-500/30">
+                      {t.report_count}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-600">0</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <BrandDefense posture={brandPosture[t.brand_slug]} />
@@ -197,7 +229,7 @@ export default function ThreatsPage() {
             {!loading && visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-4 py-10 text-center text-slate-500"
                 >
                   No findings match these filters.
@@ -277,7 +309,10 @@ function AbusePanel({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [reportCount, setReportCount] = useState(threat.report_count);
   const report = abuseReport(threat);
+  const eligible = threat.risk_score >= AUTO_REPORT_THRESHOLD;
+  const targets = reportTargets(threat);
 
   async function copy() {
     try {
@@ -287,6 +322,13 @@ function AbusePanel({
     } catch {
       /* clipboard may be unavailable */
     }
+  }
+
+  async function onReport() {
+    // Record the community report (increments the counter) when the user
+    // sends it to one of the gateways.
+    const updated = await reportThreat(threat.id);
+    setReportCount(updated ?? reportCount + 1);
   }
 
   return (
@@ -324,6 +366,40 @@ function AbusePanel({
             <ExternalLink size={15} /> urlscan
           </a>
         </div>
+
+        {eligible ? (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-red-300">
+              <Siren size={16} />
+              High risk ({threat.risk_score}) — report to a gateway
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Sends this domain to real abuse channels. Community reports so far:{" "}
+              <span className="font-semibold text-red-300">{reportCount}</span>
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {targets.map((tg) => (
+                <a
+                  key={tg.label}
+                  href={tg.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={onReport}
+                  title={tg.note}
+                  className="inline-flex items-center gap-1.5 rounded bg-red-500/90 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+                >
+                  <ExternalLink size={14} /> {tg.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-slate-500">
+            Below the auto-report threshold ({AUTO_REPORT_THRESHOLD}). Copy the
+            report above to escalate manually if warranted.
+          </p>
+        )}
+
         <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-base p-4 text-xs leading-relaxed text-slate-300">
           {report}
         </pre>

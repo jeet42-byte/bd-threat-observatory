@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import ThreatListOut, ThreatOut
+from app.api.schemas import ReportOut, ThreatListOut, ThreatOut
 from app.db.database import get_session
-from app.db.models import Brand, Domain, ThreatFinding
+from app.db.models import Brand, Certificate, Domain, ThreatFinding
 
 router = APIRouter(prefix="/threats", tags=["threats"])
 
@@ -35,16 +35,34 @@ async def list_threats(
     if brand:
         filters.append(Brand.slug == brand)
 
+    # Earliest certificate issuance per domain - our proxy for "domain went
+    # live", shown instead of pipeline ingestion time.
+    issued = (
+        select(
+            Certificate.domain_id.label("domain_id"),
+            func.min(Certificate.not_before).label("issued_at"),
+        )
+        .group_by(Certificate.domain_id)
+        .subquery()
+    )
+
     base = (
-        select(ThreatFinding, Domain, Brand)
+        select(ThreatFinding, Domain, Brand, issued.c.issued_at)
         .join(Domain, ThreatFinding.domain_id == Domain.id)
         .join(Brand, ThreatFinding.brand_id == Brand.id)
+        .join(issued, issued.c.domain_id == Domain.id, isouter=True)
         .where(*filters)
     )
 
     total = (
         await session.execute(
-            select(func.count()).select_from(base.subquery())
+            select(func.count())
+            .select_from(
+                select(ThreatFinding.id)
+                .join(Brand, ThreatFinding.brand_id == Brand.id)
+                .where(*filters)
+                .subquery()
+            )
         )
     ).scalar_one()
 
@@ -72,9 +90,41 @@ async def list_threats(
             confidence=f.confidence,
             reasons=list(f.reasons or []),
             status=f.status,
+            report_count=f.report_count,
+            issued_at=issued_at,
             first_seen_at=f.first_seen_at,
             updated_at=f.updated_at,
         )
-        for f, d, b in rows
+        for f, d, b, issued_at in rows
     ]
     return ThreatListOut(total=total, limit=limit, offset=offset, items=items)
+
+
+@router.post("/{finding_id}/report", response_model=ReportOut)
+async def report_threat(
+    finding_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ReportOut:
+    """Record a community "this is a scam" report, incrementing the counter.
+
+    A high count helps separate confirmed-abusive domains from false positives.
+    No authentication (portfolio demo); treat the count as a community signal,
+    not a verified figure.
+    """
+    finding = (
+        await session.execute(
+            select(ThreatFinding).where(ThreatFinding.id == finding_id)
+        )
+    ).scalar_one_or_none()
+    if finding is None:
+        raise HTTPException(status_code=404, detail="finding not found")
+
+    finding.report_count = (finding.report_count or 0) + 1
+    await session.commit()
+
+    domain = (
+        await session.execute(
+            select(Domain.name).where(Domain.id == finding.domain_id)
+        )
+    ).scalar_one()
+    return ReportOut(id=finding.id, domain=domain, report_count=finding.report_count)
