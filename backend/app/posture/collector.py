@@ -50,22 +50,42 @@ async def _targets(session: AsyncSession) -> list[dict]:
     return list(seen.values())
 
 
-async def run_posture(session: AsyncSession) -> PostureStats:
-    stats = PostureStats()
-    targets = await _targets(session)
-    stats.targets = len(targets)
+def scan_targets(targets: list[dict]) -> list[dict]:
+    """Probe each target and score it. Pure network + CPU, no database.
 
+    Returns a list of {target, brand_slug, category, result, reachable}. Kept
+    DB-free so the probing phase never holds a connection open (serverless
+    Postgres closes idle connections).
+    """
+    scored: list[dict] = []
     for t in targets:
         host = t["target"]
         headers = probes.probe_headers(host)
         tls = probes.probe_tls(host)
         dns = probes.probe_dns(host)
         reachable = headers is not None or tls is not None
-        if not reachable:
-            stats.unreachable += 1
+        scored.append(
+            {
+                "target": host,
+                "brand_slug": t["brand_slug"],
+                "category": t["category"],
+                "result": assess(headers or {}, tls or {}, dns),
+                "reachable": reachable,
+            }
+        )
+    return scored
 
-        result = assess(headers or {}, tls or {}, dns)
+
+async def persist_posture(session: AsyncSession, scored: list[dict]) -> PostureStats:
+    """Upsert already-scored posture results. Database only."""
+    stats = PostureStats()
+    stats.targets = len(scored)
+    for item in scored:
         stats.scanned += 1
+        if not item["reachable"]:
+            stats.unreachable += 1
+        result = item["result"]
+        host = item["target"]
 
         existing = (
             await session.execute(
@@ -77,31 +97,43 @@ async def run_posture(session: AsyncSession) -> PostureStats:
             session.add(
                 PostureScan(
                     target=host,
-                    brand_slug=t["brand_slug"],
-                    category=t["category"],
+                    brand_slug=item["brand_slug"],
+                    category=item["category"],
                     grade=result.grade,
                     score=result.score,
                     headers_score=result.headers_score,
                     tls_score=result.tls_score,
                     email_score=result.email_score,
                     findings=result.findings,
-                    reachable=reachable,
+                    reachable=item["reachable"],
                 )
             )
             stats.created += 1
         else:
-            existing.brand_slug = t["brand_slug"]
-            existing.category = t["category"]
+            existing.brand_slug = item["brand_slug"]
+            existing.category = item["category"]
             existing.grade = result.grade
             existing.score = result.score
             existing.headers_score = result.headers_score
             existing.tls_score = result.tls_score
             existing.email_score = result.email_score
             existing.findings = result.findings
-            existing.reachable = reachable
+            existing.reachable = item["reachable"]
             existing.checked_at = datetime.now(timezone.utc)
             stats.updated += 1
 
     await session.commit()
     print(f"[posture] {stats.summary()}")
     return stats
+
+
+async def load_targets(session: AsyncSession) -> list[dict]:
+    """Public wrapper: the posture targets (brands' official domains)."""
+    return await _targets(session)
+
+
+async def run_posture(session: AsyncSession) -> PostureStats:
+    """Probe then persist using one session (convenience for local use)."""
+    targets = await _targets(session)
+    scored = scan_targets(targets)
+    return await persist_posture(session, scored)
