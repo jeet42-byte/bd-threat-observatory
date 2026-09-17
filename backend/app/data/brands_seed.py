@@ -69,7 +69,7 @@ BRANDS: list[dict] = [
         "slug": "city-bank",
         "category": "bank",
         "keywords": ["citybank", "citybankbd", "citytouch"],
-        "official_domains": ["thecitybank.com"],
+        "official_domains": ["thecitybank.com", "citytouch.com", "citytouch.com.bd"],
     },
     {
         "name": "Sonali Bank",

@@ -40,11 +40,6 @@ def _labels(name: str) -> list[str]:
     return [p for p in _NON_ALNUM.split(name.lower()) if p]
 
 
-def _compact(name: str) -> str:
-    """Domain with all separators removed: 'se-cure.bkash.xyz' -> 'securebkashxyz'."""
-    return _NON_ALNUM.sub("", name.lower())
-
-
 def _is_official(registrable: str, name: str, official_domains: list[str]) -> bool:
     for off in official_domains:
         off = off.lower()
@@ -53,25 +48,60 @@ def _is_official(registrable: str, name: str, official_domains: list[str]) -> bo
     return False
 
 
+# Remainders allowed when a brand keyword is glued to another token in a single
+# domain label, e.g. "bkashreward" (lure) or "bkashbd" (BD nexus). A keyword
+# merely embedded inside an unrelated word (rocket-in-rocketlawyer) is NOT a
+# match - that was the main false-positive source.
+_ALLOWED_GLUE = frozenset({"bd", "bangla", "bangladesh", "online", "app", "help"})
+
+
 def _brand_identity(name: str, keyword: str) -> tuple[int, str] | None:
-    """Strongest brand-identity signal for one keyword, or None.
+    """Strongest brand-identity signal for one keyword, matched at the level of
+    whole domain labels (not embedded substrings), or None.
 
-    Returns (points, reason). Checks, in order of strength: verbatim keyword,
-    typosquat variant, confusable skeleton, fuzzy label similarity.
+    A label is a hit when it (1) equals the keyword, (2) equals a typosquat
+    variant, (3) is the keyword glued to a lure/BD token, (4) has the same
+    confusable skeleton, or (5) is fuzzily similar. Substrings buried inside a
+    longer unrelated word do not count.
     """
-    compact = _compact(name)
-    if keyword in compact:
-        return scoring.POINTS["keyword_exact"], f"contains brand keyword '{keyword}'"
+    labels = _labels(name)
+    variants = _variants(keyword)
+    glue = _ALLOWED_GLUE | scoring.LURE_TOKENS
 
-    hits = _variants(keyword) & set(_all_substrings_of_len(compact, keyword))
-    if hits:
-        variant = sorted(hits)[0]
-        return scoring.POINTS["typosquat"], f"typosquat of '{keyword}' ('{variant}')"
-
-    if skeleton(keyword) in skeleton(compact):
-        return scoring.POINTS["lookalike"], f"homoglyph lookalike of '{keyword}'"
-
-    for label in _labels(name):
+    for label in labels:
+        if label == keyword:
+            return (
+                scoring.POINTS["keyword_exact"],
+                f"brand keyword '{keyword}' as a domain label",
+            )
+    for label in labels:
+        if label in variants:
+            return (
+                scoring.POINTS["typosquat"],
+                f"typosquat of '{keyword}' ('{label}')",
+            )
+    # keyword glued to a lure/BD token within one label
+    for label in labels:
+        if label == keyword or keyword not in label:
+            continue
+        if label.startswith(keyword) and label[len(keyword):] in glue:
+            return (
+                scoring.POINTS["keyword_exact"],
+                f"brand keyword '{keyword}' + '{label[len(keyword):]}'",
+            )
+        if label.endswith(keyword) and label[: -len(keyword)] in glue:
+            return (
+                scoring.POINTS["keyword_exact"],
+                f"'{label[: -len(keyword)]}' + brand keyword '{keyword}'",
+            )
+    ks = skeleton(keyword)
+    for label in labels:
+        if skeleton(label) == ks and label != keyword:
+            return (
+                scoring.POINTS["lookalike"],
+                f"homoglyph lookalike of '{keyword}' ('{label}')",
+            )
+    for label in labels:
         if abs(len(label) - len(keyword)) <= 2:
             ratio = SequenceMatcher(None, label, keyword).ratio()
             if ratio >= FUZZY_THRESHOLD:
@@ -82,36 +112,35 @@ def _brand_identity(name: str, keyword: str) -> tuple[int, str] | None:
     return None
 
 
-def _all_substrings_of_len(text: str, keyword: str) -> set[str]:
-    """Substrings of ``text`` with length within +/-1 of the keyword length.
+def match_brand(
+    name: str,
+    registrable: str,
+    tld: str,
+    brand: dict,
+    legit_domains: frozenset[str] | None = None,
+) -> MatchResult | None:
+    """Return a MatchResult if ``name`` looks like it impersonates ``brand``.
 
-    Typo variants differ from the keyword by one edit, so their length is
-    len +/- 1; only those windows can match, which keeps this cheap.
+    ``legit_domains`` is the set of every monitored brand's own official
+    domains; a domain matching it is a legitimate brand property, never an
+    impersonation, and is skipped.
     """
-    out: set[str] = set()
-    for target_len in {len(keyword) - 1, len(keyword), len(keyword) + 1}:
-        if target_len <= 0:
-            continue
-        for i in range(0, len(text) - target_len + 1):
-            out.add(text[i : i + target_len])
-    return out
-
-
-def match_brand(name: str, registrable: str, tld: str, brand: dict) -> MatchResult | None:
-    """Return a MatchResult if ``name`` looks like it impersonates ``brand``."""
     if _is_official(registrable, name, brand.get("official_domains", [])):
         return None
+    if legit_domains and _is_official(registrable, name, list(legit_domains)):
+        return None
 
-    best: tuple[int, str] | None = None
+    best: tuple[int, str, str] | None = None
     for keyword in brand["keywords"]:
         identity = _brand_identity(name, keyword)
         if identity and (best is None or identity[0] > best[0]):
-            best = identity
+            best = (identity[0], identity[1], keyword)
     if best is None:
         return None  # no brand-identity signal -> not a finding
 
     score = best[0]
     reasons = [best[1]]
+    matched_keyword = best[2]
 
     tld_pts = scoring.tld_signal(tld)
     if tld_pts:
@@ -126,6 +155,13 @@ def match_brand(name: str, registrable: str, tld: str, brand: dict) -> MatchResu
     score += struct_pts
     reasons.extend(struct_reasons)
 
+    # A short brand keyword (<= 4 chars, e.g. "upay", "ibbl", "robi") matched on
+    # its own, with no suspicious TLD / lure / structure signal, collides with
+    # unrelated foreign companies. Require at least one corroborating signal.
+    amplifier_fired = bool(tld_pts or lure_pts or struct_pts)
+    if len(matched_keyword) <= 4 and not amplifier_fired:
+        return None
+
     score = min(score, 100)
     if score < MIN_SCORE:
         return None
@@ -139,9 +175,14 @@ def match_brand(name: str, registrable: str, tld: str, brand: dict) -> MatchResu
 
 def best_match(name: str, registrable: str, tld: str, brands: list[dict]) -> MatchResult | None:
     """Highest-scoring brand match for a domain, or None."""
+    legit = frozenset(
+        d.lower()
+        for brand in brands
+        for d in brand.get("official_domains", [])
+    )
     best: MatchResult | None = None
     for brand in brands:
-        result = match_brand(name, registrable, tld, brand)
+        result = match_brand(name, registrable, tld, brand, legit_domains=legit)
         if result and (best is None or result.score > best.score):
             best = result
     return best

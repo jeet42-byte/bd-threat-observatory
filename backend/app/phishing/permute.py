@@ -156,4 +156,6 @@ def generate_variants(keyword: str, include_insertions: bool = False) -> set[str
         variants |= _insertions(kw)
     variants.discard(kw)
     variants.discard("")
-    return variants
+    # Drop very short variants (e.g. "pay" from "upay") - they are common
+    # fragments that match unrelated domains and cause false positives.
+    return {v for v in variants if len(v) >= 4}

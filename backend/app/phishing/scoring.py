@@ -51,11 +51,13 @@ def tld_signal(tld: str) -> int:
 
 def lure_signals(compact_labels: list[str]) -> tuple[int, list[str]]:
     """Points + reasons for lure tokens present in the domain labels."""
+    # Match lure tokens as whole labels only, not as substrings - so "pay"
+    # inside "upay" no longer counts as a lure and inflates false positives.
     found: list[str] = []
-    for label in compact_labels:
-        for token in LURE_TOKENS:
-            if token in label and token not in found:
-                found.append(token)
+    label_set = set(compact_labels)
+    for token in LURE_TOKENS:
+        if token in label_set and token not in found:
+            found.append(token)
     points = min(len(found) * POINTS["lure_token"], POINTS["lure_cap"])
     reasons = [f"lure token '{t}'" for t in found]
     return points, reasons

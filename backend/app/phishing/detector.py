@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Brand, Domain, ThreatFinding
@@ -21,12 +21,14 @@ class DetectStats:
     domains_scanned: int = 0
     findings_created: int = 0
     findings_updated: int = 0
+    findings_removed: int = 0
     errors: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         return (
             f"scanned={self.domains_scanned} new_findings={self.findings_created} "
-            f"updated_findings={self.findings_updated} errors={len(self.errors)}"
+            f"updated_findings={self.findings_updated} "
+            f"removed_findings={self.findings_removed} errors={len(self.errors)}"
         )
 
 
@@ -58,10 +60,30 @@ async def run_detection(session: AsyncSession) -> DetectStats:
         stats.domains_scanned += 1
         match = best_match(dom.name, dom.registrable_domain, dom.tld, brands)
         if match is None:
+            # No longer a match (e.g. a former false positive under improved
+            # rules): remove any stale finding so the feed self-cleans.
+            removed = (
+                await session.execute(
+                    delete(ThreatFinding).where(ThreatFinding.domain_id == dom.id)
+                )
+            ).rowcount
+            stats.findings_removed += removed or 0
             continue
         brand_id = slug_to_id.get(match.brand_slug)
         if brand_id is None:  # pragma: no cover - slug always present
             continue
+
+        # Drop findings for this domain attributed to a different brand
+        # (re-attribution under improved rules).
+        stale = (
+            await session.execute(
+                delete(ThreatFinding).where(
+                    ThreatFinding.domain_id == dom.id,
+                    ThreatFinding.brand_id != brand_id,
+                )
+            )
+        ).rowcount
+        stats.findings_removed += stale or 0
 
         existing = (
             await session.execute(
