@@ -21,7 +21,12 @@ class Base(DeclarativeBase):
 # in tests/CI, does not accept these args, so only pass them off-SQLite.
 _engine_kwargs: dict = {"echo": False}
 if not settings.database_url.startswith("sqlite"):
-    _engine_kwargs.update(pool_pre_ping=True, pool_size=5, max_overflow=5)
+    _engine_kwargs.update(
+        pool_pre_ping=True,   # validate a connection before use (recycle if dead)
+        pool_recycle=300,     # drop connections older than 5 min (Neon idle limits)
+        pool_size=5,
+        max_overflow=5,
+    )
 
 engine = create_async_engine(settings.database_url, **_engine_kwargs)
 

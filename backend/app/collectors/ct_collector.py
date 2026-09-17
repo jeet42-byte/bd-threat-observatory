@@ -102,13 +102,30 @@ async def _get_or_create_domain(
     return dom
 
 
-async def ingest_from_crtsh(session: AsyncSession) -> IngestStats:
-    """Query crt.sh for every brand keyword and persist new certs + domains."""
-    stats = IngestStats()
-    keywords = _brand_keywords()
-    stats.keywords_queried = len(keywords)
+async def fetch_crtsh_rows() -> tuple[list[dict], int]:
+    """Fetch raw crt.sh rows for every brand keyword. No database involved.
 
+    Kept separate from persistence so the (slow, minutes-long) network phase
+    never holds a database connection open — important on serverless Postgres
+    (e.g. Neon) that closes idle connections / scales compute to zero.
+    """
+    keywords = _brand_keywords()
     rows = await crtsh.search_keywords(keywords)
+    return rows, len(keywords)
+
+
+async def ingest_from_crtsh(session: AsyncSession) -> IngestStats:
+    """Fetch from crt.sh then persist (convenience wrapper for local use)."""
+    rows, keyword_count = await fetch_crtsh_rows()
+    return await persist_crtsh_rows(session, rows, keyword_count)
+
+
+async def persist_crtsh_rows(
+    session: AsyncSession, rows: list[dict], keyword_count: int
+) -> IngestStats:
+    """Persist already-fetched crt.sh rows as new certs + domains."""
+    stats = IngestStats()
+    stats.keywords_queried = keyword_count
     stats.rows_fetched = len(rows)
 
     domain_cache: dict[str, Domain] = {}
