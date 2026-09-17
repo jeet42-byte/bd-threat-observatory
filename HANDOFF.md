@@ -3,7 +3,7 @@
 Session-to-session state so any new session can resume without re-explaining.
 Branch: `claude/nifty-ritchie-omdcrq`
 
-## Where we are: end of Day 3
+## Where we are: end of Day 4
 
 **Goal of the week:** build two portfolio projects (#1 Security Posture
 Observatory, #2 Phishing/Scam Feed) as ONE repo sharing a Certificate
@@ -90,21 +90,46 @@ Transparency ingestion core. Stack mirrors the author's `bangladesh-crime-monito
 - Live crt.sh fetch + real Postgres still need GitHub Actions + Neon
   `DATABASE_URL`. API/detector logic proven on SQLite; only live ingest pending.
 
+
+### Done (Day 4) — posture observatory
+- `backend/app/db/models.py` — `PostureScan` (target, brand, grade A-F,
+  sub-scores headers/tls/email, findings JSONB, reachable, checked_at).
+- `backend/app/posture/scoring.py` — pure, weighted scoring:
+  headers (HSTS/CSP/XFO/XCTO/Referrer/Permissions, 45%), TLS version (30%),
+  email SPF+DMARC (25%) -> 0-100 -> A-F. Explainable findings.
+- `backend/app/posture/probes.py` — passive probes: HTTPS GET headers, TLS
+  handshake version, public DNS TXT (SPF/_dmarc). Best-effort, run on Actions.
+- `backend/app/posture/collector.py` + `run_posture.py` — targets = brand
+  official domains; idempotent upsert of PostureScan.
+- `backend/app/api/v1/posture.py` + schemas — `GET /api/v1/posture`
+  (filters category/grade/brand; grade_distribution + average_score).
+- `.github/workflows/posture_cron.yml` — daily posture scan.
+- `seed_mock.py` now also seeds 6 posture scans (A->F spread).
+- Portability fixes: init_db skips pg_trgm off-Postgres so demo/tests run on
+  SQLite. +9 tests (posture scoring + posture API). Suite 35/35 green.
+
+### Verified (Day 4)
+- End-to-end on SQLite: seed_mock -> 15 findings + 6 posture scans; both
+  `/api/v1/threats` and `/api/v1/posture` return correct data. Grade spread
+  A(bkash) B(gp) D(brac) E(nagad) F(sonali/ec.gov). OpenAPI lists /posture.
+
+### NOT yet verified (same sandbox blocks)
+- Live probes (headers/TLS/DNS) + real Postgres need GitHub Actions + Neon.
+  Scoring/collector/API logic proven on SQLite; only live scan pending.
+
 ## To deploy the pipeline (when ready)
 1. Create a Neon Postgres DB; get the `postgresql+asyncpg://...` URL.
 2. Add repo secret `DATABASE_URL` (Settings → Secrets → Actions).
 3. Run the `ingest_cron` workflow via "Run workflow" (workflow_dispatch).
 4. Confirm rows land in `brands`, `domains`, `certificates`.
 
-## Next: Day 4 — posture observatory collector
-- Reuse discovered registrable domains (from `domains`) for BD orgs; add
-  `PostureScan` model (org, grade A-F, sub-scores, checked_at).
-- Passive checks only: HTTP security headers (HSTS, CSP, X-Frame-Options),
-  TLS version/cipher, and email auth (SPF/DKIM/DMARC via public DNS TXT).
-  All from a normal request / public DNS — no scanning.
-- Grading logic + `/api/v1/posture` endpoints; keep offline-testable
-  (feed synthetic header/DNS dicts into pure scoring functions).
-- Note: these checks also need outbound egress -> run on GitHub Actions.
+## Next: Day 5 — /posture dashboard + cross-linking
+- Next.js `/posture` page: org table with A-F grade badges, sub-score bars,
+  category filter, grade distribution chart (Recharts), findings drill-down.
+- Cross-link: on a threat, show whether the impersonated brand's real domain
+  has DMARC (from posture) - i.e. is spoofing blunted. Add a small nav between
+  /threats and /posture.
+- Extend `web/src/lib` with posture types + fetch + sample fallback.
 
 ## Conventions
 - Every day ends at a committed, working checkpoint pushed to the branch.

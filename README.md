@@ -5,9 +5,9 @@ pipeline feeds two products:
 
 - **Phishing & Scam Feed** — detects fake bKash / Nagad / bank / gov domains
   as their TLS certificates appear in public Certificate Transparency logs.
-- **Security Posture Observatory** — grades the public web security posture
-  (headers, TLS, email auth) of Bangladeshi banks, telcos, and government
-  services over time.
+- **Security Posture Observatory** — grades the public web security posture of
+  Bangladeshi banks, telcos, and government services (HTTP security headers,
+  TLS version, SPF/DMARC email auth) on an A-F scale, from passive checks only.
 
 > **Ethics & legality.** This project is strictly **passive OSINT**. It reads
 > only public data (Certificate Transparency logs, DNS, and information a normal
@@ -36,6 +36,7 @@ bd-threat-observatory/
 │   │   ├── db/                    database.py, models.py, init_db.py
 │   │   ├── collectors/            crtsh.py, ct_collector.py, run_ingest.py
 │   │   ├── phishing/              permute.py, scoring.py, matcher.py, detector.py
+│   │   ├── posture/               scoring.py, probes.py, collector.py
 │   │   ├── api/                   schemas.py + v1/{threats,brands,stats}.py
 │   │   ├── main.py                FastAPI app
 │   │   ├── data/brands_seed.py    BD brands monitored for impersonation
@@ -45,7 +46,8 @@ bd-threat-observatory/
 ├── web/                           Next.js dashboard (/threats)
 │   └── src/{app,components,lib}
 └── .github/workflows/
-    ├── ingest_cron.yml            every 6 hours
+    ├── ingest_cron.yml            phishing ingest, every 6 hours
+    ├── posture_cron.yml           posture scan, daily
     └── ci.yml                     tests on push / PR
 ```
 
@@ -98,6 +100,7 @@ Endpoints:
 | GET | `/api/v1/threats` | phishing feed (filters: `brand`, `confidence`, `min_score`, pagination) |
 | GET | `/api/v1/brands` | monitored brands |
 | GET | `/api/v1/stats` | headline counts |
+| GET | `/api/v1/posture` | security-posture grades (filters: `category`, `grade`, `brand`) |
 
 ## Frontend (dashboard)
 
@@ -119,6 +122,6 @@ Under active development — built in daily increments (see `HANDOFF.md`).
 - [x] **Day 1** — shared ingestion core: schema, brand seed, crt.sh collector, cron, CI
 - [x] **Day 2** — phishing detection: typosquat/homoglyph engine, rule-based scoring, findings
 - [x] **Day 3** — public API (FastAPI) + `/threats` dashboard (Next.js) + mock seed
-- [ ] Day 4 — posture collector + A–F grading
+- [x] **Day 4** — posture observatory: passive header/TLS/email-auth checks + A–F grading + API
 - [ ] Day 5 — `/posture` dashboard + cross-linking
 - [ ] Day 6 — polish, report, deploy

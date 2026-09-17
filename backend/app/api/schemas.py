@@ -57,3 +57,30 @@ class StatsOut(BaseModel):
     by_confidence: list[ConfidenceCount]
     top_brands: list[BrandCount]
     latest_finding_at: datetime | None
+
+
+class PostureFinding(BaseModel):
+    check: str
+    status: str  # ok | warn | fail
+    detail: str
+
+
+class PostureOut(BaseModel):
+    target: str
+    brand_slug: str | None
+    category: str
+    grade: str
+    score: int
+    headers_score: int
+    tls_score: int
+    email_score: int
+    reachable: bool
+    findings: list[PostureFinding]
+    checked_at: datetime
+
+
+class PostureListOut(BaseModel):
+    total: int
+    items: list[PostureOut]
+    grade_distribution: list[dict]
+    average_score: float | None

@@ -15,8 +15,10 @@ from app.db import models  # noqa: F401  (register models on Base.metadata)
 
 async def init_db() -> None:
     async with engine.begin() as conn:
-        # pg_trgm powers fuzzy domain similarity used by the phishing feed.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        # pg_trgm powers fuzzy domain similarity on Postgres; skip on SQLite
+        # (used for local demos / tests), which has no extension mechanism.
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     print("[init_db] schema ready")
 

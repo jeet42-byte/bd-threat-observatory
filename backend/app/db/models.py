@@ -170,3 +170,40 @@ class ThreatFinding(Base):
             f"<ThreatFinding brand={self.brand_id} domain={self.domain_id} "
             f"risk={self.risk_score}>"
         )
+
+
+class PostureScan(Base):
+    """Latest passive security-posture assessment of a monitored org domain.
+
+    Produced by the posture collector (Day 4). One row per target domain,
+    updated in place on each scan (history can be added later).
+    """
+
+    __tablename__ = "posture_scans"
+    __table_args__ = (
+        UniqueConstraint("target", name="uq_posture_target"),
+        Index("ix_posture_grade", "grade"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # The org's authoritative domain, e.g. "bkash.com".
+    target: Mapped[str] = mapped_column(String(255), nullable=False)
+    brand_slug: Mapped[str | None] = mapped_column(String(120), index=True)
+    category: Mapped[str] = mapped_column(String(40), nullable=False, default="other")
+
+    grade: Mapped[str] = mapped_column(String(2), nullable=False, default="F")
+    score: Mapped[int] = mapped_column(nullable=False, default=0)
+    headers_score: Mapped[int] = mapped_column(nullable=False, default=0)
+    tls_score: Mapped[int] = mapped_column(nullable=False, default=0)
+    email_score: Mapped[int] = mapped_column(nullable=False, default=0)
+    # List of {check, status: ok|warn|fail, detail}.
+    findings: Mapped[list[dict]] = mapped_column(JSONType, default=list, nullable=False)
+    # True when the target could not be reached (scored as unknown, not F).
+    reachable: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<PostureScan {self.target} grade={self.grade}>"

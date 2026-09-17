@@ -108,3 +108,10 @@ def test_stats_endpoint(client):
     assert s["total_domains"] == 2
     assert any(c["confidence"] == "critical" for c in s["by_confidence"])
     assert s["top_brands"][0]["brand_slug"] == "bkash"
+
+
+def test_posture_endpoint_empty_ok(client):
+    # No posture rows seeded in this module; endpoint should still respond.
+    body = client.get("/api/v1/posture").json()
+    assert body["total"] == 0
+    assert body["average_score"] is None
