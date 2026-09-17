@@ -7,6 +7,7 @@ import { ShieldAlert, Radio } from "lucide-react";
 const LINKS = [
   { href: "/threats", label: "Phishing feed" },
   { href: "/posture", label: "Posture grades" },
+  { href: "/about", label: "About" },
 ];
 
 export function Nav({ live }: { live?: boolean }) {

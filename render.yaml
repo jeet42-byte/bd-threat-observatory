@@ -1,0 +1,19 @@
+# Render blueprint for the read-only API.
+# The database is Neon (external); set DATABASE_URL as a secret in the Render
+# dashboard. Ingestion + posture scans run on GitHub Actions, not here.
+services:
+  - type: web
+    name: bd-threat-observatory-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false   # set in dashboard (Neon async URL)
+      - key: PYTHON_VERSION
+        value: "3.11"

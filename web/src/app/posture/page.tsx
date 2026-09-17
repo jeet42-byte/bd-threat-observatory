@@ -1,15 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
 import { X, ShieldCheck, ShieldX } from "lucide-react";
 import type { Posture } from "@/lib/types";
 import { fetchPosture, hasDmarc } from "@/lib/api";
@@ -60,6 +51,15 @@ export default function PosturePage() {
     () => items.filter((i) => ["E", "F"].includes(i.grade)).length,
     [items],
   );
+
+  // Always show A-F in order (fill gaps with 0) so bars align under labels.
+  const fullDist = useMemo(() => {
+    const by = new Map(dist.map((d) => [d.grade, d.count]));
+    return ["A", "B", "C", "D", "E", "F"].map((g) => ({
+      grade: g,
+      count: by.get(g) ?? 0,
+    }));
+  }, [dist]);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -146,31 +146,36 @@ export default function PosturePage() {
           </table>
         </div>
 
-        {/* Distribution chart */}
+        {/* Distribution */}
         <div className="rounded-xl border border-edge bg-panel p-4">
           <div className="text-sm font-medium">Grade distribution</div>
-          <div className="mt-3 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dist}>
-                <XAxis dataKey="grade" stroke="#64748b" fontSize={12} />
-                <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#0b0f1a",
-                    border: "1px solid #243049",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {dist.map((d) => (
-                    <Cell key={d.grade} fill={GRADE_COLORS[d.grade] ?? "#64748b"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-4 space-y-2.5">
+            {fullDist.map((d) => {
+              const max = Math.max(1, ...fullDist.map((x) => x.count));
+              const pct = (d.count / max) * 100;
+              return (
+                <div key={d.grade} className="flex items-center gap-3">
+                  <span className="w-4 text-sm font-bold text-slate-300">
+                    {d.grade}
+                  </span>
+                  <div className="h-4 flex-1 overflow-hidden rounded bg-slate-700/40">
+                    <div
+                      className="h-full rounded"
+                      style={{
+                        width: `${pct}%`,
+                        background: GRADE_COLORS[d.grade] ?? "#64748b",
+                        minWidth: d.count > 0 ? "6px" : "0",
+                      }}
+                    />
+                  </div>
+                  <span className="w-5 text-right text-xs tabular-nums text-slate-400">
+                    {d.count}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-500">
             Higher grade = stronger public web-security configuration.
           </p>
         </div>

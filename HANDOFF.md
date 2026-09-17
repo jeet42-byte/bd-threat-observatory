@@ -3,7 +3,7 @@
 Session-to-session state so any new session can resume without re-explaining.
 Branch: `claude/nifty-ritchie-omdcrq`
 
-## Where we are: end of Day 5
+## Where we are: end of Day 6
 
 **Goal of the week:** build two portfolio projects (#1 Security Posture
 Observatory, #2 Phishing/Scam Feed) as ONE repo sharing a Certificate
@@ -136,19 +136,37 @@ Transparency ingestion core. Stack mirrors the author's `bangladesh-crime-monito
 - Both dashboards read `NEXT_PUBLIC_API_BASE`; without it they render bundled
   sample data (so Vercel preview works before the API/DB is live).
 
+
+### Done (Day 6) — polish, report, deploy prep
+- `backend/app/report/generate.py` — "State of .bd Web Security" markdown
+  report (grade distribution, weakest postures, common gaps, phishing summary).
+  +1 test. Suite 36/36 green.
+- Deploy configs: `render.yaml` (API), `web/vercel.json`, `backend/Procfile`,
+  and `DEPLOYMENT.md` (Neon + Render + Vercel + Actions, step by step).
+- Frontend `/about` page (methodology, ethics/legality, data sources,
+  disclaimer); About added to nav.
+- Replaced the posture Recharts chart with a robust CSS bar viz (renders
+  identically headless; dropped recharts dep, /posture bundle 102kB -> 6.5kB).
+- Real screenshots captured via Playwright/Chromium into `docs/screenshots/`
+  (threats.png, posture.png, about.png, landing.png); embedded in README.
+
+### Remaining (needs the user's dashboards)
+- Live deploy: create Neon DB, set GitHub `DATABASE_URL` secret, run both
+  workflows once, deploy Render (render.yaml) + Vercel (root web/, set
+  NEXT_PUBLIC_API_BASE). All documented in DEPLOYMENT.md.
+- Day 7 buffer: optional extra brands, more posture targets, README tweaks.
+
 ## To deploy the pipeline (when ready)
 1. Create a Neon Postgres DB; get the `postgresql+asyncpg://...` URL.
 2. Add repo secret `DATABASE_URL` (Settings → Secrets → Actions).
 3. Run the `ingest_cron` workflow via "Run workflow" (workflow_dispatch).
 4. Confirm rows land in `brands`, `domains`, `certificates`.
 
-## Next: Day 6 — polish, report, deploy
-- READMEs with screenshots/GIF of both dashboards.
-- "State of .bd Web Security" mini-report generator (markdown/PDF from posture
-  data): grade distribution, worst offenders, common gaps.
-- Deploy: Neon (DB) + Render (API) + Vercel (web); set DATABASE_URL secret,
-  run ingest + posture workflows once, point NEXT_PUBLIC_API_BASE at Render.
-- Optional: small landing polish + about/ethics page.
+## Next: Day 7 (buffer) / deploy
+- The whole product is built, tested (36 backend tests, clean frontend build),
+  and documented. What's left is the live deploy (user's dashboards) per
+  DEPLOYMENT.md, and any optional polish (more brands/targets, a hosted demo
+  link in the README once Vercel is up).
 
 ## Conventions
 - Every day ends at a committed, working checkpoint pushed to the branch.

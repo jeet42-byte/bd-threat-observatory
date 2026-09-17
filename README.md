@@ -15,6 +15,17 @@ pipeline feeds two products:
 > unauthorised access**, in line with Bangladesh's Cyber Security Act. Brand
 > names are used only to detect impersonation of those brands.
 
+## Screenshots
+
+**Phishing & scam feed** — live impersonation findings with explainable signals
+and a cross-link to each brand's real-domain email defense:
+
+![Phishing feed](docs/screenshots/threats.png)
+
+**Security posture observatory** — A–F grades for monitored BD organisations:
+
+![Posture grades](docs/screenshots/posture.png)
+
 ## Architecture
 
 | Layer | Technology | Host (free tier) |
@@ -115,6 +126,20 @@ cp .env.example .env.local   # set NEXT_PUBLIC_API_BASE to your API URL
 npm run dev                  # http://localhost:3000/threats
 ```
 
+## Report
+
+Generate the "State of .bd Web Security" briefing (grade distribution, weakest
+postures, most common gaps, phishing summary) from live data:
+
+```bash
+cd backend && python -m app.report.generate > REPORT.md
+```
+
+## Deployment
+
+Free-tier stack: Neon (DB) + Render (API) + Vercel (dashboard) + GitHub Actions
+(collectors). Step-by-step in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ## Status
 
 Under active development — built in daily increments (see `HANDOFF.md`).
@@ -124,4 +149,4 @@ Under active development — built in daily increments (see `HANDOFF.md`).
 - [x] **Day 3** — public API (FastAPI) + `/threats` dashboard (Next.js) + mock seed
 - [x] **Day 4** — posture observatory: passive header/TLS/email-auth checks + A–F grading + API
 - [x] **Day 5** — `/posture` dashboard (grades, sub-score bars, distribution chart) + threat↔posture cross-link
-- [ ] Day 6 — polish, report, deploy
+- [x] **Day 6** — screenshots, deployment configs, `/about` page, "State of .bd" report generator
