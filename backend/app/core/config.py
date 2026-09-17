@@ -7,8 +7,37 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Query params that are libpq-only and make the asyncpg driver error.
+_ASYNCPG_INCOMPATIBLE_PARAMS = {"sslmode", "channel_binding"}
+
+
+def normalize_database_url(url: str) -> str:
+    """Make any Postgres URL safe for the async (asyncpg) driver.
+
+    - upgrades ``postgres://`` / ``postgresql://`` to ``postgresql+asyncpg://``
+      (a plain scheme would select the sync psycopg2 driver, which we don't ship)
+    - drops libpq-only query params (``sslmode``, ``channel_binding``) that
+      asyncpg rejects; asyncpg negotiates TLS on its own.
+
+    SQLite URLs (used in tests) pass through unchanged.
+    """
+    if url.startswith("sqlite"):
+        return url
+    parts = urlsplit(url)
+    scheme = parts.scheme
+    if scheme in {"postgres", "postgresql"} or (
+        scheme.startswith("postgresql+") and "asyncpg" not in scheme
+    ):
+        scheme = "postgresql+asyncpg"
+    query = urlencode(
+        [(k, v) for k, v in parse_qsl(parts.query) if k not in _ASYNCPG_INCOMPATIBLE_PARAMS]
+    )
+    return urlunsplit((scheme, parts.netloc, parts.path, query, parts.fragment))
 
 
 class Settings(BaseSettings):
@@ -41,6 +70,11 @@ class Settings(BaseSettings):
     # --- API ---
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        return normalize_database_url(v)
 
     @property
     def is_production(self) -> bool:
