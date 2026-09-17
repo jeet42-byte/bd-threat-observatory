@@ -92,6 +92,12 @@ async def list_threats(
             status=f.status,
             report_count=f.report_count,
             issued_at=issued_at,
+            registrar=f.registrar,
+            registrant_org=f.registrant_org,
+            registrant_country=f.registrant_country,
+            domain_created_at=f.domain_created_at,
+            intel=list(f.intel or []),
+            enriched_at=f.enriched_at,
             first_seen_at=f.first_seen_at,
             updated_at=f.updated_at,
         )

@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # starting new queries and persists what it has (keeps the job well under
     # its timeout and never commits nothing).
     ct_run_budget_seconds: int = Field(default=600)
+    # Max findings to enrich (RDAP + reputation) per run; bounds runtime/rate.
+    enrich_max_per_run: int = Field(default=80)
+    # Re-enrich a finding only if older than this many days.
+    enrich_ttl_days: int = Field(default=7)
+    # Optional Google Safe Browsing API key (enables that intel source).
+    gsb_api_key: str = Field(default="")
     # Only certificates first-seen within this many days are considered "new"
     # for the live feed. Backfill ignores this.
     ct_recent_days: int = Field(default=7)

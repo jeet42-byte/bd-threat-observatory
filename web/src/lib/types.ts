@@ -14,8 +14,21 @@ export interface Threat {
   status: string;
   report_count: number;
   issued_at: string | null;
+  registrar: string | null;
+  registrant_org: string | null;
+  registrant_country: string | null;
+  domain_created_at: string | null;
+  intel: IntelItem[];
+  enriched_at: string | null;
   first_seen_at: string;
   updated_at: string;
+}
+
+export interface IntelItem {
+  source: string;
+  status: "malicious" | "listed" | "clean" | "unknown";
+  detail: string;
+  url: string;
 }
 
 export interface ThreatList {

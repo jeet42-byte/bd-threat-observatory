@@ -33,6 +33,13 @@ class ThreatOut(BaseModel):
     # Transparency). A close proxy for when the domain went live - far more
     # meaningful than when our pipeline first ingested it. None if unknown.
     issued_at: datetime | None
+    # OSINT enrichment (RDAP + open threat-intel), when available.
+    registrar: str | None
+    registrant_org: str | None
+    registrant_country: str | None
+    domain_created_at: datetime | None
+    intel: list[dict]
+    enriched_at: datetime | None
     first_seen_at: datetime
     updated_at: datetime
 

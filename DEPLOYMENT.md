@@ -22,6 +22,7 @@ Repo → Settings → Secrets and variables → Actions → **New repository sec
 | Name | Value |
 |---|---|
 | `DATABASE_URL` | the `postgresql+asyncpg://…` URL from step 1 |
+| `GSB_API_KEY` | _(optional)_ Google Safe Browsing API key to enable that intel source |
 
 The two workflows read this secret:
 - **Ingest (Certificate Transparency)** — `.github/workflows/ingest_cron.yml`, every 6h

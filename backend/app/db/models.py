@@ -155,6 +155,17 @@ class ThreatFinding(Base):
     # Community "this is a scam" reports for this domain. A high count is a
     # strong signal separating confirmed-abusive domains from false positives.
     report_count: Mapped[int] = mapped_column(nullable=False, default=0)
+
+    # --- OSINT enrichment (RDAP + open threat-intel), best-effort ---
+    registrar: Mapped[str | None] = mapped_column(String(255))
+    registrant_org: Mapped[str | None] = mapped_column(String(255))
+    registrant_country: Mapped[str | None] = mapped_column(String(8))
+    # True domain registration date from RDAP (more accurate than cert issuance).
+    domain_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # What open sources report: list of {source, status, detail, url}.
+    intel: Mapped[list[dict]] = mapped_column(JSONType, default=list, nullable=False)
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

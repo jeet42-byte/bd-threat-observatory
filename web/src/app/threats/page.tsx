@@ -10,7 +10,7 @@ import {
   ShieldX,
   Siren,
 } from "lucide-react";
-import type { Posture, Stats, Threat } from "@/lib/types";
+import type { IntelItem, Posture, Stats, Threat } from "@/lib/types";
 import {
   fetchPosture,
   fetchStats,
@@ -153,15 +153,21 @@ export default function ThreatsPage() {
       </section>
 
       <section className="mt-4 overflow-x-auto rounded-xl border border-edge">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-panel text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Domain</th>
               <th className="px-4 py-3">Brand</th>
               <th className="px-4 py-3">Risk</th>
               <th className="px-4 py-3">Signals</th>
-              <th className="px-4 py-3" title="Earliest TLS certificate (approx. go-live)">
-                Issued
+              <th className="px-4 py-3" title="Domain registrar and registration date (RDAP)">
+                Registrar
+              </th>
+              <th className="px-4 py-3" title="What open threat-intel sources report">
+                Open-source intel
+              </th>
+              <th className="px-4 py-3" title="Registration / cert-issuance date">
+                Registered
               </th>
               <th className="px-4 py-3" title="Community scam reports">Reports</th>
               <th className="px-4 py-3">Brand defense</th>
@@ -196,10 +202,18 @@ export default function ThreatsPage() {
                     )}
                   </div>
                 </td>
+                <td className="px-4 py-3">
+                  <Registrar threat={t} />
+                </td>
+                <td className="px-4 py-3">
+                  <IntelCell items={t.intel} />
+                </td>
                 <td className="px-4 py-3 text-slate-400">
-                  {(t.issued_at
-                    ? new Date(t.issued_at)
-                    : new Date(t.first_seen_at)
+                  {(t.domain_created_at
+                    ? new Date(t.domain_created_at)
+                    : t.issued_at
+                      ? new Date(t.issued_at)
+                      : new Date(t.first_seen_at)
                   )
                     .toISOString()
                     .slice(0, 10)}
@@ -229,7 +243,7 @@ export default function ThreatsPage() {
             {!loading && visible.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={10}
                   className="px-4 py-10 text-center text-slate-500"
                 >
                   No findings match these filters.
@@ -261,6 +275,53 @@ export default function ThreatsPage() {
         }
       `}</style>
     </main>
+  );
+}
+
+function Registrar({ threat }: { threat: Threat }) {
+  if (!threat.registrar && !threat.registrant_org) {
+    return <span className="text-xs text-slate-600">—</span>;
+  }
+  return (
+    <div className="text-xs">
+      <div className="text-slate-300">{threat.registrar ?? "unknown registrar"}</div>
+      {threat.registrant_org && (
+        <div className="text-slate-500">{threat.registrant_org}</div>
+      )}
+      {threat.registrant_country && (
+        <div className="text-slate-500">{threat.registrant_country}</div>
+      )}
+    </div>
+  );
+}
+
+const INTEL_STYLE: Record<string, string> = {
+  malicious: "bg-red-500/15 text-red-300 ring-red-500/30",
+  listed: "bg-yellow-500/15 text-yellow-200 ring-yellow-500/30",
+  clean: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
+  unknown: "bg-slate-600/20 text-slate-400 ring-slate-600/30",
+};
+
+function IntelCell({ items }: { items: IntelItem[] }) {
+  const real = items.filter((i) => i.status !== "unknown");
+  if (real.length === 0) {
+    return <span className="text-xs text-slate-600">not listed</span>;
+  }
+  return (
+    <div className="flex max-w-[240px] flex-wrap gap-1">
+      {real.map((i, idx) => (
+        <a
+          key={idx}
+          href={i.url}
+          target="_blank"
+          rel="noreferrer"
+          title={`${i.source}: ${i.detail}`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${INTEL_STYLE[i.status] ?? INTEL_STYLE.unknown}`}
+        >
+          {i.source}: {i.status}
+        </a>
+      ))}
+    </div>
   );
 }
 

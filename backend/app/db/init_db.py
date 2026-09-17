@@ -19,6 +19,12 @@ from app.db import models  # noqa: F401  (register models on Base.metadata)
 _POSTGRES_COLUMN_MIGRATIONS = (
     "ALTER TABLE threat_findings "
     "ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS registrar VARCHAR(255)",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS registrant_org VARCHAR(255)",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS registrant_country VARCHAR(8)",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS domain_created_at TIMESTAMPTZ",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS intel JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE threat_findings ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ",
 )
 
 

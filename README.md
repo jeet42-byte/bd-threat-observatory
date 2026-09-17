@@ -121,6 +121,7 @@ Endpoints:
 | GET | `/api/v1/brands` | monitored brands |
 | GET | `/api/v1/stats` | headline counts |
 | GET | `/api/v1/posture` | security-posture grades (filters: `category`, `grade`, `brand`) |
+| POST | `/api/v1/threats/{id}/report` | record a community scam report (increments counter) |
 
 ## Frontend (dashboard)
 

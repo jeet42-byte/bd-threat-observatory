@@ -20,6 +20,7 @@ from app.collectors.ct_collector import (
     seed_brands,
 )
 from app.phishing.detector import run_detection
+from app.enrich.enricher import run_enrichment
 
 
 async def main() -> int:
@@ -32,8 +33,10 @@ async def main() -> int:
         await seed_brands(session)
         stats = await persist_crtsh_rows(session, rows, keyword_count)
         detect_stats = await run_detection(session)
+        enrich_stats = await run_enrichment(session)
     print(f"[run_ingest] ingest: {stats.summary()}")
     print(f"[run_ingest] detect: {detect_stats.summary()}")
+    print(f"[run_ingest] enrich: {enrich_stats.summary()}")
     return 0
 
 
