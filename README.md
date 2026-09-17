@@ -15,6 +15,15 @@ pipeline feeds two products:
 > unauthorised access**, in line with Bangladesh's Cyber Security Act. Brand
 > names are used only to detect impersonation of those brands.
 
+## One-click deploy
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jeet42-byte/bd-threat-observatory)
+
+The button reads `render.yaml` and provisions the API; you supply the Neon
+`DATABASE_URL` when prompted. Then deploy the dashboard on Vercel (root
+directory `web/`, env `NEXT_PUBLIC_API_BASE` = the API URL). Full walkthrough in
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ## Screenshots
 
 **Phishing & scam feed** — live impersonation findings with explainable signals
